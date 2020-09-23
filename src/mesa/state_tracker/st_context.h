@@ -155,6 +155,7 @@ struct st_context
    boolean has_single_pipe_stat;
    boolean has_indep_blend_func;
    boolean needs_rgb_dst_alpha_override;
+   boolean no_dithering;
    boolean can_bind_const_buffer_as_vertex;
    boolean lower_flatshade;
    boolean lower_alpha_test;
