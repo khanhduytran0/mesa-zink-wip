@@ -942,7 +942,9 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
             }
          }
 
-         if (0) {
+         if (1) {
+            if (!rho_squared)
+               rho = lp_build_mul(lodf_bld, rho, rho);
             lod = lp_build_log2(lodf_bld, rho);
          }
          else {
