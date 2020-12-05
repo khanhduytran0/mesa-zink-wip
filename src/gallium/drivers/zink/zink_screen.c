@@ -231,7 +231,7 @@ zink_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
 
    switch (param) {
    case PIPE_COMPUTE_CAP_ADDRESS_BITS:
-      RET((uint32_t []){ 32 });
+      RET((uint32_t []){ 64 });
 
    case PIPE_COMPUTE_CAP_IR_TARGET:
       if (ret)
@@ -256,6 +256,7 @@ zink_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
    case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
       RET((uint64_t []) { screen->info.props.limits.maxComputeWorkGroupInvocations });
 
+   case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
    case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
       RET((uint64_t []) { screen->info.props.limits.maxComputeSharedMemorySize });
 
@@ -266,13 +267,16 @@ zink_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
       RET((uint32_t []) { screen->info.props11.subgroupSize });
 
    case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
-   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
-   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
-   case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
+      RET((uint64_t []) { 1 << 30 }); /* does vulkan even expose this? */
+
+   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+      RET((uint32_t []) { 400 }); /* does vulkan even expose this? */
+
+   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+      RET((uint32_t []) { 8 }); /* does vulkan even expose this? */
    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
-      // XXX: I think these are for Clover...
-      return 0;
+      RET((uint64_t []) { 1024 }); /* does vulkan even expose this? */
 
    default:
       unreachable("unknown compute param");
@@ -949,7 +953,7 @@ zink_get_shader_param(struct pipe_screen *pscreen,
       return MIN2(screen->info.props.limits.maxPerStageDescriptorStorageBuffers, PIPE_MAX_SHADER_BUFFERS);
 
    case PIPE_SHADER_CAP_SUPPORTED_IRS:
-      return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_TGSI);
+      return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR_SERIALIZED);
 
    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       if (screen->info.feats.features.shaderStorageImageExtendedFormats &&
