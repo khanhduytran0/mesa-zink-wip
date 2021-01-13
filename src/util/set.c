@@ -383,6 +383,62 @@ _mesa_set_resize(struct set *set, uint32_t entries)
 }
 
 /**
+ * This is the same as set_search_or_add(), but optimized for a table with no deleted entries.
+ */
+static struct set_entry *
+set_search_or_add_fast(struct set *ht, uint32_t hash, const void *key, bool *found)
+{
+   struct set_entry *available_entry = NULL;
+
+   assert(!ht->deleted_entries);
+   assert(!key_pointer_is_reserved(key));
+
+   if (ht->entries >= ht->max_entries) {
+      set_rehash(ht, ht->size_index + 1);
+   }
+
+   uint32_t size = ht->size;
+   uint32_t start_address = util_fast_urem32(hash, size, ht->size_magic);
+   uint32_t double_hash = util_fast_urem32(hash, ht->rehash,
+                                           ht->rehash_magic) + 1;
+   uint32_t hash_address = start_address;
+   do {
+      struct set_entry *entry = ht->table + hash_address;
+
+      if (!entry->key) {
+         /* Stash the first available entry we find */
+         if (available_entry == NULL)
+            available_entry = entry;
+         break;
+      }
+
+      if (entry->hash == hash &&
+          ht->key_equals_function(key, entry->key)) {
+         if (found)
+            *found = true;
+         return entry;
+      }
+
+      hash_address = hash_address + double_hash;
+      if (hash_address >= size)
+         hash_address -= size;
+   } while (hash_address != start_address);
+
+   if (available_entry) {
+      available_entry->hash = hash;
+      available_entry->key = key;
+      ht->entries++;
+      if (found)
+         *found = false;
+      return available_entry;
+   }
+
+   /* We could hit here if a required resize failed. An unchecked-malloc
+    * application could ignore this result.
+    */
+   return NULL;
+}
+/**
  * Find a matching entry for the given key, or insert it if it doesn't already
  * exist.
  *
@@ -393,6 +449,9 @@ static struct set_entry *
 set_search_or_add(struct set *ht, uint32_t hash, const void *key, bool *found)
 {
    struct set_entry *available_entry = NULL;
+
+   if (!ht->deleted_entries)
+      return set_search_or_add_fast(ht, hash, key, found);
 
    assert(!key_pointer_is_reserved(key));
 
