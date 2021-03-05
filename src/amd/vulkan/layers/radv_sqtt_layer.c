@@ -411,6 +411,23 @@ sqtt_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
    return VK_SUCCESS;
 }
 
+VkResult sqtt_QueueSubmit(
+	VkQueue                                     _queue,
+	uint32_t                                    submitCount,
+	const VkSubmitInfo*                         pSubmits,
+	VkFence                                     fence)
+{
+	VkResult result;
+
+	result = radv_QueueSubmit(_queue, submitCount, pSubmits, fence);
+	if (result != VK_SUCCESS)
+		return result;
+
+	radv_handle_thread_trace(_queue);
+
+	return VK_SUCCESS;
+}
+
 #define EVENT_MARKER_ALIAS(cmd_name, api_name, ...)                                                \
    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);                                   \
    radv_write_begin_general_api_marker(cmd_buffer, ApiCmd##api_name);                              \
