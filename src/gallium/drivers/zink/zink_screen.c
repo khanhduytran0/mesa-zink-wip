@@ -1597,6 +1597,10 @@ static void
 check_device_needs_mesa_wsi(struct zink_screen *screen)
 {
    if (
+       /* turnip */
+       (screen->info.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
+        screen->info.props.vendorID == 0 &&
+        screen->info.props.deviceID == 0) ||
        /* Raspberry Pi 4 V3DV driver */
        (screen->info.props.vendorID == 0x14E4 &&
         screen->info.props.deviceID == 42) ||
