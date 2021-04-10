@@ -340,6 +340,27 @@ fix_blendfactor(enum pipe_blendfactor f, bool alpha_to_one)
    return f;
 }
 
+
+/**
+ * Get rid of DST in the blend factors by commuting the operands:
+ *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
+ */
+static void si_blend_remove_dst(unsigned *func, unsigned *src_factor, unsigned *dst_factor,
+                                unsigned expected_dst, unsigned replacement_src)
+{
+   if (*src_factor == expected_dst && *dst_factor == PIPE_BLENDFACTOR_ZERO) {
+      *src_factor = PIPE_BLENDFACTOR_ZERO;
+      *dst_factor = replacement_src;
+
+      /* Commuting the operands requires reversing subtractions. */
+      if (*func == PIPE_BLEND_SUBTRACT)
+         *func = PIPE_BLEND_REVERSE_SUBTRACT;
+      else if (*func == PIPE_BLEND_REVERSE_SUBTRACT)
+         *func = PIPE_BLEND_SUBTRACT;
+   }
+}
+
+
 static void *
 zink_create_blend_state(struct pipe_context *pctx,
                         const struct pipe_blend_state *blend_state)
@@ -375,17 +396,38 @@ zink_create_blend_state(struct pipe_context *pctx,
 
       if (rt->blend_enable) {
          att.blendEnable = VK_TRUE;
-         att.srcColorBlendFactor = blend_factor(fix_blendfactor(rt->rgb_src_factor, cso->alpha_to_one));
-         att.dstColorBlendFactor = blend_factor(fix_blendfactor(rt->rgb_dst_factor, cso->alpha_to_one));
-         att.colorBlendOp = blend_op(rt->rgb_func);
-         att.srcAlphaBlendFactor = blend_factor(fix_blendfactor(rt->alpha_src_factor, cso->alpha_to_one));
-         att.dstAlphaBlendFactor = blend_factor(fix_blendfactor(rt->alpha_dst_factor, cso->alpha_to_one));
-         att.alphaBlendOp = blend_op(rt->alpha_func);
 
-         if (need_blend_constants(rt->rgb_src_factor) ||
-             need_blend_constants(rt->rgb_dst_factor) ||
-             need_blend_constants(rt->alpha_src_factor) ||
-             need_blend_constants(rt->alpha_dst_factor))
+         unsigned eqRGB = rt->rgb_func;
+         unsigned srcRGB = rt->rgb_src_factor;
+         unsigned dstRGB = rt->rgb_dst_factor;
+         unsigned eqA = rt->alpha_func;
+         unsigned srcA = rt->alpha_src_factor;
+         unsigned dstA = rt->alpha_dst_factor;
+
+         /* Blending optimizations for RB+.
+          * These transformations don't change the behavior.
+          *
+          * First, get rid of DST in the blend factors:
+          *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
+          */
+         si_blend_remove_dst(&eqRGB, &srcRGB, &dstRGB, PIPE_BLENDFACTOR_DST_COLOR,
+                             PIPE_BLENDFACTOR_SRC_COLOR);
+         si_blend_remove_dst(&eqA, &srcA, &dstA, PIPE_BLENDFACTOR_DST_COLOR,
+                             PIPE_BLENDFACTOR_SRC_COLOR);
+         si_blend_remove_dst(&eqA, &srcA, &dstA, PIPE_BLENDFACTOR_DST_ALPHA,
+                             PIPE_BLENDFACTOR_SRC_ALPHA);
+
+         att.srcColorBlendFactor = blend_factor(fix_blendfactor(srcRGB, cso->alpha_to_one));
+         att.dstColorBlendFactor = blend_factor(fix_blendfactor(dstRGB, cso->alpha_to_one));
+         att.colorBlendOp = blend_op(eqRGB);
+         att.srcAlphaBlendFactor = blend_factor(fix_blendfactor(srcA, cso->alpha_to_one));
+         att.dstAlphaBlendFactor = blend_factor(fix_blendfactor(dstA, cso->alpha_to_one));
+         att.alphaBlendOp = blend_op(eqA);
+
+         if (need_blend_constants(srcRGB) ||
+             need_blend_constants(dstRGB) ||
+             need_blend_constants(srcA) ||
+             need_blend_constants(dstA))
             cso->need_blend_constants = true;
       }
 
