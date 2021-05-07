@@ -1305,6 +1305,7 @@ zink_buffer_map(struct pipe_context *pctx,
          res->so_valid = false;
       }
       ptr = map_resource(screen, res);
+      assert(ptr);
       if (!ptr)
          goto fail;
       ptr = ((uint8_t *)ptr) + box->x;
