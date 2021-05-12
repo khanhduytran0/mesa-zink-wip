@@ -212,7 +212,8 @@ trace_screen_get_paramf(struct pipe_screen *_screen,
 static int
 trace_screen_get_compute_param(struct pipe_screen *_screen,
                                enum pipe_shader_ir ir_type,
-                               enum pipe_compute_cap param, void *data)
+                               enum pipe_compute_cap param,
+                               void *data)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
@@ -589,7 +590,7 @@ trace_screen_resource_create_unbacked(struct pipe_screen *_screen,
 
 static struct pipe_resource *
 trace_screen_resource_create(struct pipe_screen *_screen,
-                            const struct pipe_resource *templat)
+                             const struct pipe_resource *templat)
 {
    struct trace_screen *tr_scr = trace_screen(_screen);
    struct pipe_screen *screen = tr_scr->screen;
@@ -638,8 +639,8 @@ trace_screen_resource_create_with_modifiers(struct pipe_screen *_screen, const s
 
 static struct pipe_resource *
 trace_screen_resource_from_handle(struct pipe_screen *_screen,
-                                 const struct pipe_resource *templ,
-                                 struct winsys_handle *handle,
+                                  const struct pipe_resource *templ,
+                                  struct winsys_handle *handle,
                                   unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
@@ -668,8 +669,8 @@ trace_screen_check_resource_capability(struct pipe_screen *_screen,
 static bool
 trace_screen_resource_get_handle(struct pipe_screen *_screen,
                                  struct pipe_context *_pipe,
-                                struct pipe_resource *resource,
-                                struct winsys_handle *handle,
+                                 struct pipe_resource *resource,
+                                 struct winsys_handle *handle,
                                  unsigned usage)
 {
    struct trace_screen *tr_screen = trace_screen(_screen);
@@ -793,7 +794,7 @@ trace_screen_fence_reference(struct pipe_screen *_screen,
 
    assert(pdst);
    dst = *pdst;
-   
+
    trace_dump_call_begin("pipe_screen", "fence_reference");
 
    trace_dump_arg(ptr, screen);
