@@ -345,7 +345,7 @@ struct hash_entry *
 _mesa_hash_table_search(struct hash_table *ht, const void *key)
 {
    assert(ht->key_hash_function);
-   return hash_table_search(ht, ht->key_hash_function(key), key);
+   return ht->entries ? hash_table_search(ht, ht->key_hash_function(key), key) : NULL;
 }
 
 struct hash_entry *
@@ -353,7 +353,7 @@ _mesa_hash_table_search_pre_hashed(struct hash_table *ht, uint32_t hash,
                                   const void *key)
 {
    assert(ht->key_hash_function == NULL || hash == ht->key_hash_function(key));
-   return hash_table_search(ht, hash, key);
+   return ht->entries ? hash_table_search(ht, hash, key) : NULL;
 }
 
 static struct hash_entry *
