@@ -293,7 +293,7 @@ struct set_entry *
 _mesa_set_search(const struct set *set, const void *key)
 {
    assert(set->key_hash_function);
-   return set_search(set, set->key_hash_function(key), key);
+   return set->entries ? set_search(set, set->key_hash_function(key), key) : NULL;
 }
 
 struct set_entry *
@@ -302,7 +302,7 @@ _mesa_set_search_pre_hashed(const struct set *set, uint32_t hash,
 {
    assert(set->key_hash_function == NULL ||
           hash == set->key_hash_function(key));
-   return set_search(set, hash, key);
+   return set->entries ? set_search(set, hash, key) : NULL;
 }
 
 static void
