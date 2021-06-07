@@ -88,3 +88,5 @@ CALL(delete_sampler_state)
 
 CALL(begin_intel_perf_query)
 CALL(end_intel_perf_query)
+
+CALL(set_prediction_mode)

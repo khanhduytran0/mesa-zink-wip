@@ -2235,6 +2235,19 @@ static void trace_context_make_image_handle_resident(struct pipe_context *_pipe,
    pipe->make_image_handle_resident(pipe, handle, access, resident);
 }
 
+static void trace_context_set_prediction_mode(struct pipe_context *_pipe, bool enable)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "set_prediction_mode");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(bool, enable);
+   trace_dump_call_end();
+
+   pipe->set_prediction_mode(pipe, enable);
+}
+
 struct pipe_context *
 trace_context_create(struct trace_screen *tr_scr,
                      struct pipe_context *pipe)
@@ -2364,6 +2377,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(invalidate_resource);
    TR_CTX_INIT(set_context_param);
    TR_CTX_INIT(set_debug_callback);
+   TR_CTX_INIT(set_prediction_mode);
 
 #undef TR_CTX_INIT
 

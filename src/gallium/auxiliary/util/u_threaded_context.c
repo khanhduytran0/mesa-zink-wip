@@ -4174,6 +4174,27 @@ tc_get_intel_perf_query_data(struct pipe_context *_pipe,
    return pipe->get_intel_perf_query_data(pipe, q, data_size, data, bytes_written);
 }
 
+struct tc_set_prediction_mode_call {
+   struct tc_call_base base;
+   bool enable;
+};
+
+static uint16_t
+tc_call_set_prediction_mode(struct pipe_context *pipe, void *call, uint64_t *last)
+{
+   struct tc_set_prediction_mode_call *p = to_call(call, tc_set_prediction_mode_call);
+   pipe->set_prediction_mode(pipe, p->enable);
+   return call_size(tc_set_prediction_mode_call);
+}
+
+static void
+tc_set_prediction_mode(struct pipe_context *_pipe, bool enable)
+{
+   struct threaded_context *tc = threaded_context(_pipe);
+
+   tc_add_call(tc, TC_CALL_set_prediction_mode, tc_set_prediction_mode_call)->enable = enable;
+}
+
 /********************************************************************
  * callback
  */
@@ -4506,6 +4527,7 @@ threaded_context_create(struct pipe_context *pipe,
    CTX_INIT(wait_intel_perf_query);
    CTX_INIT(is_intel_perf_query_ready);
    CTX_INIT(get_intel_perf_query_data);
+   CTX_INIT(set_prediction_mode);
 #undef CTX_INIT
 
    if (out)
