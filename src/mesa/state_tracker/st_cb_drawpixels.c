@@ -742,7 +742,8 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
                    struct st_fp_variant *fpv,
                    const GLfloat *color,
                    GLboolean invertTex,
-                   GLboolean write_depth, GLboolean write_stencil)
+                   GLboolean write_depth, GLboolean write_stencil,
+                   GLboolean needs_fs_constants)
 {
    struct st_context *st = st_context(ctx);
    struct pipe_context *pipe = st->pipe;
@@ -777,29 +778,11 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    }
    cso_save_state(cso, cso_state_mask);
 
-   /* rasterizer state: just scissor */
-   {
-      struct pipe_rasterizer_state rasterizer;
-      memset(&rasterizer, 0, sizeof(rasterizer));
-      rasterizer.clamp_fragment_color = !st->clamp_frag_color_in_shader &&
-                                        ctx->Color._ClampFragmentColor;
-      rasterizer.half_pixel_center = 1;
-      rasterizer.bottom_edge_rule = 1;
-      rasterizer.depth_clip_near = st->clamp_frag_depth_in_shader ||
-                                   !ctx->Transform.DepthClampNear;
-      rasterizer.depth_clip_far = st->clamp_frag_depth_in_shader ||
-                                  !ctx->Transform.DepthClampFar;
-      rasterizer.depth_clamp = !rasterizer.depth_clip_far;
-      rasterizer.scissor = ctx->Scissor.EnableFlags;
-      cso_set_rasterizer(cso, &rasterizer);
-   }
-
    if (write_stencil) {
       /* Stencil writing bypasses the normal fragment pipeline to
        * disable color writing and set stencil test to always pass.
        */
       struct pipe_depth_stencil_alpha_state dsa;
-      struct pipe_blend_state blend;
 
       /* depth/stencil */
       memset(&dsa, 0, sizeof(dsa));
@@ -814,22 +797,20 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
          dsa.depth_func = PIPE_FUNC_ALWAYS;
       }
       cso_set_depth_stencil_alpha(cso, &dsa);
-
-      /* blend (colormask) */
-      memset(&blend, 0, sizeof(blend));
-      cso_set_blend(cso, &blend);
    }
 
    /* fragment shader state: TEX lookup program */
    cso_set_fragment_shader_handle(cso, driver_fp);
 
+   /* disable other shaders */
+   cso_set_geometry_shader_handle(cso, NULL);
+   cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
+
    /* vertex shader state: position + texcoord pass-through */
    cso_set_vertex_shader_handle(cso, driver_vp);
 
-   /* disable other shaders */
-   cso_set_tessctrl_shader_handle(cso, NULL);
-   cso_set_tesseval_shader_handle(cso, NULL);
-   cso_set_geometry_shader_handle(cso, NULL);
+
 
    /* user samplers, plus the drawpix samplers */
    {
@@ -899,8 +880,41 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
          pipe_sampler_view_reference(&sv[i], NULL);
    }
 
+   if (write_stencil) {
+      struct pipe_blend_state blend;
+
+      /* blend (colormask) */
+      memset(&blend, 0, sizeof(blend));
+      cso_set_blend(cso, &blend);
+   }
+
+   /* rasterizer state: just scissor */
+   {
+      struct pipe_rasterizer_state rasterizer;
+      memset(&rasterizer, 0, sizeof(rasterizer));
+      rasterizer.clamp_fragment_color = !st->clamp_frag_color_in_shader &&
+                                        ctx->Color._ClampFragmentColor;
+      rasterizer.half_pixel_center = 1;
+      rasterizer.bottom_edge_rule = 1;
+      rasterizer.depth_clip_near = st->clamp_frag_depth_in_shader ||
+                                   !ctx->Transform.DepthClampNear;
+      rasterizer.depth_clip_far = st->clamp_frag_depth_in_shader ||
+                                  !ctx->Transform.DepthClampFar;
+      rasterizer.depth_clamp = !rasterizer.depth_clip_far;
+      rasterizer.scissor = ctx->Scissor.EnableFlags;
+      cso_set_rasterizer(cso, &rasterizer);
+   }
+
+
    /* viewport state: viewport matching window dims */
    cso_set_viewport_dims(cso, fb_width, fb_height, TRUE);
+
+   if (needs_fs_constants) {
+      /* compiling a new fragment shader variant added new state constants
+       * into the constant buffer, we need to update them
+       */
+      st_upload_constants(st, &st->fp->Base, MESA_SHADER_FRAGMENT);
+   }
 
    st->util_velems.count = 3;
    cso_set_vertex_elements(cso, &st->util_velems);
@@ -1372,6 +1386,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
    /*
     * Get vertex/fragment shaders
     */
+   bool needs_fs_constants = false;
    if (write_depth || write_stencil) {
       driver_fp = get_drawpix_z_stencil_program(st, write_depth,
                                                 write_stencil);
@@ -1388,10 +1403,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
          num_sampler_view++;
       }
 
-      /* compiling a new fragment shader variant added new state constants
-       * into the constant buffer, we need to update them
-       */
-      st_upload_constants(st, &st->fp->Base, MESA_SHADER_FRAGMENT);
+      needs_fs_constants = true;
    }
 
    {
@@ -1437,7 +1449,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
                       st->passthrough_vs,
                       driver_fp, fpv,
                       ctx->Current.RasterColor,
-                      GL_FALSE, write_depth, write_stencil);
+                      GL_FALSE, write_depth, write_stencil, needs_fs_constants);
 
    /* free the texture (but may persist in the cache) */
    pipe_resource_reference(&pt, NULL);
@@ -1765,6 +1777,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    /*
     * Get vertex/fragment shaders
     */
+   bool needs_fs_constants = false;
    if (type == GL_COLOR) {
       fpv = get_color_fp_variant(st);
 
@@ -1778,10 +1791,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          num_sampler_view++;
       }
 
-      /* compiling a new fragment shader variant added new state constants
-       * into the constant buffer, we need to update them
-       */
-      st_upload_constants(st, &st->fp->Base, MESA_SHADER_FRAGMENT);
+      needs_fs_constants = true;
    } else if (type == GL_DEPTH) {
       rbRead = st_renderbuffer(ctx->ReadBuffer->
                                Attachment[BUFFER_DEPTH].Renderbuffer);
@@ -1972,7 +1982,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
                       st->passthrough_vs,
                       driver_fp, fpv,
                       ctx->Current.Attrib[VERT_ATTRIB_COLOR0],
-                      invertTex, write_depth, write_stencil);
+                      invertTex, write_depth, write_stencil, needs_fs_constants);
 
    pipe_resource_reference(&pt, NULL);
 }

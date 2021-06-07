@@ -173,19 +173,10 @@ st_pbo_addresses_invert_y(struct st_pbo_addresses *addr,
    addr->constants.stride = -addr->constants.stride;
 }
 
-/* Setup all vertex pipeline state, rasterizer state, and fragment shader
- * constants, and issue the draw call for PBO upload/download.
- *
- * The caller is responsible for saving and restoring state, as well as for
- * setting other fragment shader state (fragment shader, samplers), and
- * framebuffer/viewport/DSA/blend state.
- */
 bool
-st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
-            unsigned surface_width, unsigned surface_height)
+st_pbo_set_shaders(struct st_context *st, const struct st_pbo_addresses *addr)
 {
    struct cso_context *cso = st->cso_context;
-   struct pipe_context *pipe = st->pipe;
 
    /* Setup vertex and geometry shaders */
    if (!st->pbo.vs) {
@@ -199,14 +190,40 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
       if (!st->pbo.gs)
          return false;
    }
-
-   cso_set_vertex_shader_handle(cso, st->pbo.vs);
-
    cso_set_geometry_shader_handle(cso, addr->depth != 1 ? st->pbo.gs : NULL);
-
-   cso_set_tessctrl_shader_handle(cso, NULL);
-
    cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
+   cso_set_vertex_shader_handle(cso, st->pbo.vs);
+   return true;
+}
+
+/* Setup all vertex elements and buffers, fragment shader constants,
+ * and issue the draw call for PBO upload/download.
+ *
+ * The caller is responsible for saving and restoring state, as well as for
+ * setting other fragment shader state (fragment shader, samplers), and
+ * framebuffer/viewport/DSA/blend state.
+ */
+bool
+st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
+            unsigned surface_width, unsigned surface_height)
+{
+   struct cso_context *cso = st->cso_context;
+   struct pipe_context *pipe = st->pipe;
+
+   /* Upload constants */
+   {
+      struct pipe_constant_buffer cb;
+
+      cb.buffer = NULL;
+      cb.user_buffer = &addr->constants;
+      cb.buffer_offset = 0;
+      cb.buffer_size = sizeof(addr->constants);
+
+      pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 0, false, &cb);
+
+      pipe_resource_reference(&cb.buffer, NULL);
+   }
 
    /* Upload vertices */
    {
@@ -252,23 +269,6 @@ st_pbo_draw(struct st_context *st, const struct st_pbo_addresses *addr,
 
       pipe_resource_reference(&vbo.buffer.resource, NULL);
    }
-
-   /* Upload constants */
-   {
-      struct pipe_constant_buffer cb;
-
-      cb.buffer = NULL;
-      cb.user_buffer = &addr->constants;
-      cb.buffer_offset = 0;
-      cb.buffer_size = sizeof(addr->constants);
-
-      pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, 0, false, &cb);
-
-      pipe_resource_reference(&cb.buffer, NULL);
-   }
-
-   /* Rasterizer state */
-   cso_set_rasterizer(cso, &st->pbo.raster);
 
    /* Disable stream output */
    cso_set_stream_outputs(cso, 0, NULL, 0);

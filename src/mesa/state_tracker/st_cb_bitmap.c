@@ -184,21 +184,6 @@ setup_render_state(struct gl_context *ctx,
 
    fpv = st_get_fp_variant(st, st->fp, &key);
 
-   /* As an optimization, Mesa's fragment programs will sometimes get the
-    * primary color from a statevar/constant rather than a varying variable.
-    * when that's the case, we need to ensure that we use the 'color'
-    * parameter and not the current attribute color (which may have changed
-    * through glRasterPos and state validation.
-    * So, we force the proper color here.  Not elegant, but it works.
-    */
-   {
-      GLfloat colorSave[4];
-      COPY_4V(colorSave, ctx->Current.Attrib[VERT_ATTRIB_COLOR0]);
-      COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], color);
-      st_upload_constants(st, &st->fp->Base, MESA_SHADER_FRAGMENT);
-      COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], colorSave);
-   }
-
    cso_save_state(cso, (CSO_BIT_RASTERIZER |
                         CSO_BIT_FRAGMENT_SAMPLERS |
                         CSO_BIT_VIEWPORT |
@@ -207,20 +192,30 @@ setup_render_state(struct gl_context *ctx,
                         CSO_BITS_ALL_SHADERS));
 
 
-   /* rasterizer state: just scissor */
-   st->bitmap.rasterizer.scissor = ctx->Scissor.EnableFlags & 1;
-   cso_set_rasterizer(cso, &st->bitmap.rasterizer);
-
    /* fragment shader state: TEX lookup program */
    cso_set_fragment_shader_handle(cso, fpv->base.driver_shader);
+
+   /* disable other shaders */
+   cso_set_geometry_shader_handle(cso, NULL);
+   cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
 
    /* vertex shader state: position + texcoord pass-through */
    cso_set_vertex_shader_handle(cso, st->passthrough_vs);
 
-   /* disable other shaders */
-   cso_set_tessctrl_shader_handle(cso, NULL);
-   cso_set_tesseval_shader_handle(cso, NULL);
-   cso_set_geometry_shader_handle(cso, NULL);
+   /* user textures, plus the bitmap texture */
+   {
+      struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
+      unsigned num_views =
+         st_get_sampler_views(st, PIPE_SHADER_FRAGMENT,
+                              ctx->FragmentProgram._Current, sampler_views);
+
+      num_views = MAX2(fpv->bitmap_sampler + 1, num_views);
+      sampler_views[fpv->bitmap_sampler] = sv;
+      pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, num_views, 0,
+                              true, sampler_views);
+      st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = num_views;
+   }
 
    /* user samplers, plus our bitmap sampler */
    {
@@ -239,24 +234,29 @@ setup_render_state(struct gl_context *ctx,
                        (const struct pipe_sampler_state **) samplers);
    }
 
-   /* user textures, plus the bitmap texture */
-   {
-      struct pipe_sampler_view *sampler_views[PIPE_MAX_SAMPLERS];
-      unsigned num_views =
-         st_get_sampler_views(st, PIPE_SHADER_FRAGMENT,
-                              ctx->FragmentProgram._Current, sampler_views);
-
-      num_views = MAX2(fpv->bitmap_sampler + 1, num_views);
-      sampler_views[fpv->bitmap_sampler] = sv;
-      pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, num_views, 0,
-                              true, sampler_views);
-      st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = num_views;
-   }
+   /* rasterizer state: just scissor */
+   st->bitmap.rasterizer.scissor = ctx->Scissor.EnableFlags & 1;
+   cso_set_rasterizer(cso, &st->bitmap.rasterizer);
 
    /* viewport state: viewport matching window dims */
    cso_set_viewport_dims(cso, st->state.fb_width,
                          st->state.fb_height,
                          st->state.fb_orientation == Y_0_TOP);
+
+   /* As an optimization, Mesa's fragment programs will sometimes get the
+    * primary color from a statevar/constant rather than a varying variable.
+    * when that's the case, we need to ensure that we use the 'color'
+    * parameter and not the current attribute color (which may have changed
+    * through glRasterPos and state validation.
+    * So, we force the proper color here.  Not elegant, but it works.
+    */
+   {
+      GLfloat colorSave[4];
+      COPY_4V(colorSave, ctx->Current.Attrib[VERT_ATTRIB_COLOR0]);
+      COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], color);
+      st_upload_constants(st, &st->fp->Base, MESA_SHADER_FRAGMENT);
+      COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], colorSave);
+   }
 
    st->util_velems.count = 3;
    cso_set_vertex_elements(cso, &st->util_velems);

@@ -188,8 +188,10 @@ set_vertex_shader(struct st_context *st)
       }
    }
 
-   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs);
    cso_set_geometry_shader_handle(st->cso_context, NULL);
+   cso_set_tesseval_shader_handle(st->cso_context, NULL);
+   cso_set_tessctrl_shader_handle(st->cso_context, NULL);
+   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs);
 }
 
 
@@ -221,8 +223,10 @@ set_vertex_shader_layered(struct st_context *st)
       }
    }
 
-   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs_layered);
    cso_set_geometry_shader_handle(st->cso_context, st->clear.gs_layered);
+   cso_set_tesseval_shader_handle(st->cso_context, NULL);
+   cso_set_tessctrl_shader_handle(st->cso_context, NULL);
+   cso_set_vertex_shader_handle(st->cso_context, st->clear.vs_layered);
 }
 
 
@@ -269,31 +273,6 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
                         (st->active_queries ? CSO_BIT_PAUSE_QUERIES : 0) |
                         CSO_BITS_ALL_SHADERS));
 
-   /* blend state: RGBA masking */
-   {
-      struct pipe_blend_state blend;
-      memset(&blend, 0, sizeof(blend));
-      if (clear_buffers & PIPE_CLEAR_COLOR) {
-         int num_buffers = ctx->Extensions.EXT_draw_buffers2 ?
-                           ctx->DrawBuffer->_NumColorDrawBuffers : 1;
-         int i;
-
-         blend.independent_blend_enable = num_buffers > 1;
-         blend.max_rt = num_buffers - 1;
-
-         for (i = 0; i < num_buffers; i++) {
-            if (!(clear_buffers & (PIPE_CLEAR_COLOR0 << i)))
-               continue;
-
-            blend.rt[i].colormask = GET_COLORMASK(ctx->Color.ColorMask, i);
-         }
-
-         if (ctx->Color.DitherFlag)
-            blend.dither = 1;
-      }
-      cso_set_blend(cso, &blend);
-   }
-
    /* depth_stencil state: always pass/set to ref value */
    {
       struct pipe_depth_stencil_alpha_state depth_stencil;
@@ -321,28 +300,50 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
       cso_set_depth_stencil_alpha(cso, &depth_stencil);
    }
 
-   st->util_velems.count = 2;
-   cso_set_vertex_elements(cso, &st->util_velems);
-
-   cso_set_stream_outputs(cso, 0, NULL, NULL);
-   cso_set_sample_mask(cso, ~0);
-   cso_set_min_samples(cso, 1);
-   st->clear.raster.multisample = st->state.fb_num_samples > 1;
-   cso_set_rasterizer(cso, &st->clear.raster);
-
-   /* viewport state: viewport matching window dims */
-   cso_set_viewport_dims(st->cso_context, fb_width, fb_height,
-                         st_fb_orientation(fb) == Y_0_TOP);
-
    set_fragment_shader(st);
-   cso_set_tessctrl_shader_handle(cso, NULL);
-   cso_set_tesseval_shader_handle(cso, NULL);
 
    if (num_layers > 1)
       set_vertex_shader_layered(st);
    else
       set_vertex_shader(st);
 
+   /* blend state: RGBA masking */
+   {
+      struct pipe_blend_state blend;
+      memset(&blend, 0, sizeof(blend));
+      if (clear_buffers & PIPE_CLEAR_COLOR) {
+         int num_buffers = ctx->Extensions.EXT_draw_buffers2 ?
+                           ctx->DrawBuffer->_NumColorDrawBuffers : 1;
+         int i;
+
+         blend.independent_blend_enable = num_buffers > 1;
+         blend.max_rt = num_buffers - 1;
+
+         for (i = 0; i < num_buffers; i++) {
+            if (!(clear_buffers & (PIPE_CLEAR_COLOR0 << i)))
+               continue;
+
+            blend.rt[i].colormask = GET_COLORMASK(ctx->Color.ColorMask, i);
+         }
+
+         if (ctx->Color.DitherFlag)
+            blend.dither = 1;
+      }
+      cso_set_blend(cso, &blend);
+   }
+
+   st->clear.raster.multisample = st->state.fb_num_samples > 1;
+   cso_set_rasterizer(cso, &st->clear.raster);
+   cso_set_sample_mask(cso, ~0);
+   cso_set_min_samples(cso, 1);
+
+   /* viewport state: viewport matching window dims */
+   cso_set_viewport_dims(st->cso_context, fb_width, fb_height,
+                         st_fb_orientation(fb) == Y_0_TOP);
+
+   st->util_velems.count = 2;
+   cso_set_vertex_elements(cso, &st->util_velems);
+   cso_set_stream_outputs(cso, 0, NULL, NULL);
    /* draw quad matching scissor rect.
     *
     * Note: if we're only clearing depth/stencil we still setup vertices

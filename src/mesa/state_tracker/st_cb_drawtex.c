@@ -297,26 +297,14 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
                         CSO_BIT_GEOMETRY_SHADER |
                         CSO_BIT_VERTEX_ELEMENTS));
 
+   cso_set_geometry_shader_handle(cso, NULL);
+   cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
    {
       void *vs = lookup_shader(st, numAttribs,
                                semantic_names, semantic_indexes);
       cso_set_vertex_shader_handle(cso, vs);
    }
-   cso_set_tessctrl_shader_handle(cso, NULL);
-   cso_set_tesseval_shader_handle(cso, NULL);
-   cso_set_geometry_shader_handle(cso, NULL);
-
-   for (i = 0; i < numAttribs; i++) {
-      velems.velems[i].src_offset = i * 4 * sizeof(float);
-      velems.velems[i].instance_divisor = 0;
-      velems.velems[i].vertex_buffer_index = 0;
-      velems.velems[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
-      velems.velems[i].dual_slot = false;
-   }
-   velems.count = numAttribs;
-
-   cso_set_vertex_elements(cso, &velems);
-   cso_set_stream_outputs(cso, 0, NULL, NULL);
 
    /* viewport state: viewport matching window dims */
    {
@@ -337,6 +325,18 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
       vp.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
       cso_set_viewport(cso, &vp);
    }
+
+   for (i = 0; i < numAttribs; i++) {
+      velems.velems[i].src_offset = i * 4 * sizeof(float);
+      velems.velems[i].instance_divisor = 0;
+      velems.velems[i].vertex_buffer_index = 0;
+      velems.velems[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      velems.velems[i].dual_slot = false;
+   }
+   velems.count = numAttribs;
+
+   cso_set_vertex_elements(cso, &velems);
+   cso_set_stream_outputs(cso, 0, NULL, NULL);
 
    util_draw_vertex_buffer(pipe, cso, vbuffer, 0,
                            offset,  /* offset */

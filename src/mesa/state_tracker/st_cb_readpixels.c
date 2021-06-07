@@ -151,9 +151,33 @@ try_pbo_readpixels(struct st_context *st, struct st_renderbuffer *strb,
                         CSO_BIT_RENDER_CONDITION |
                         CSO_BITS_ALL_SHADERS));
 
-   cso_set_sample_mask(cso, ~0);
-   cso_set_min_samples(cso, 1);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+   {
+      struct pipe_depth_stencil_alpha_state dsa;
+      memset(&dsa, 0, sizeof(dsa));
+      cso_set_depth_stencil_alpha(cso, &dsa);
+   }
+
+   switch (texture->target) {
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_CUBE_ARRAY:
+      view_target = PIPE_TEXTURE_2D_ARRAY;
+      break;
+   default:
+      view_target = texture->target;
+      break;
+   }
+
+   /* Set up the fragment shader */
+   {
+      void *fs = st_pbo_get_download_fs(st, view_target, src_format, dst_format, addr.depth != 1);
+      if (!fs)
+         goto fail;
+
+      cso_set_fragment_shader_handle(cso, fs);
+   }
+
+   if (!st_pbo_set_shaders(st, &addr))
+      goto fail;
 
    /* Set up the sampler_view */
    {
@@ -163,16 +187,6 @@ try_pbo_readpixels(struct st_context *st, struct st_renderbuffer *strb,
       const struct pipe_sampler_state *samplers[1] = {&sampler};
 
       u_sampler_view_default_template(&templ, texture, src_format);
-
-      switch (texture->target) {
-      case PIPE_TEXTURE_CUBE:
-      case PIPE_TEXTURE_CUBE_ARRAY:
-         view_target = PIPE_TEXTURE_2D_ARRAY;
-         break;
-      default:
-         view_target = texture->target;
-         break;
-      }
 
       templ.target = view_target;
       templ.u.tex.first_level = surface->u.tex.level;
@@ -228,25 +242,17 @@ try_pbo_readpixels(struct st_context *st, struct st_renderbuffer *strb,
     */
    cso_set_blend(cso, &st->pbo.upload_blend);
 
+   /* Rasterizer state */
+   cso_set_rasterizer(cso, &st->pbo.raster);
+
+   cso_set_sample_mask(cso, ~0);
+   cso_set_min_samples(cso, 1);
+
    cso_set_viewport_dims(cso, fb.width, fb.height, invert_y);
+   cso_set_render_condition(cso, NULL, FALSE, 0);
 
    if (invert_y)
       st_pbo_addresses_invert_y(&addr, fb.height);
-
-   {
-      struct pipe_depth_stencil_alpha_state dsa;
-      memset(&dsa, 0, sizeof(dsa));
-      cso_set_depth_stencil_alpha(cso, &dsa);
-   }
-
-   /* Set up the fragment shader */
-   {
-      void *fs = st_pbo_get_download_fs(st, view_target, src_format, dst_format, addr.depth != 1);
-      if (!fs)
-         goto fail;
-
-      cso_set_fragment_shader_handle(cso, fs);
-   }
 
    success = st_pbo_draw(st, &addr, fb.width, fb.height);
 

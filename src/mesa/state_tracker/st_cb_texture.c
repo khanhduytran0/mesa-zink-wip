@@ -1594,9 +1594,19 @@ try_pbo_upload_common(struct gl_context *ctx,
                         CSO_BIT_RENDER_CONDITION |
                         CSO_BITS_ALL_SHADERS));
 
-   cso_set_sample_mask(cso, ~0);
-   cso_set_min_samples(cso, 1);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+
+   /* Depth/stencil/alpha state */
+   {
+      struct pipe_depth_stencil_alpha_state dsa;
+      memset(&dsa, 0, sizeof(dsa));
+      cso_set_depth_stencil_alpha(cso, &dsa);
+   }
+
+   /* Set up the fragment shader */
+   cso_set_fragment_shader_handle(cso, fs);
+
+   if (!st_pbo_set_shaders(st, addr))
+      goto fail;
 
    /* Set up the sampler_view */
    {
@@ -1638,20 +1648,17 @@ try_pbo_upload_common(struct gl_context *ctx,
       cso_set_framebuffer(cso, &fb);
    }
 
-   cso_set_viewport_dims(cso, surface->width, surface->height, FALSE);
-
    /* Blend state */
    cso_set_blend(cso, &st->pbo.upload_blend);
 
-   /* Depth/stencil/alpha state */
-   {
-      struct pipe_depth_stencil_alpha_state dsa;
-      memset(&dsa, 0, sizeof(dsa));
-      cso_set_depth_stencil_alpha(cso, &dsa);
-   }
+   /* Rasterizer state */
+   cso_set_rasterizer(cso, &st->pbo.raster);
 
-   /* Set up the fragment shader */
-   cso_set_fragment_shader_handle(cso, fs);
+   cso_set_sample_mask(cso, ~0);
+   cso_set_min_samples(cso, 1);
+   cso_set_render_condition(cso, NULL, FALSE, 0);
+
+   cso_set_viewport_dims(cso, surface->width, surface->height, FALSE);
 
    success = st_pbo_draw(st, addr, surface->width, surface->height);
 
@@ -1940,7 +1947,10 @@ try_pbo_download(struct st_context *st,
 
       cso_set_fragment_shader_handle(cso, fs);
    }
-
+   if (!st_pbo_set_shaders(st, &addr))
+      goto fail;
+   /* Rasterizer state */
+   cso_set_rasterizer(cso, &st->pbo.raster);
    success = st_pbo_draw(st, &addr, fb.width, fb.height);
 
    /* Buffer written via shader images needs explicit synchronization. */
