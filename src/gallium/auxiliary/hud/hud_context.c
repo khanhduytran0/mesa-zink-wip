@@ -77,6 +77,7 @@ hud_draw_colored_prims(struct hud_context *hud, unsigned prim,
    struct pipe_context *pipe = hud->pipe;
    struct pipe_vertex_buffer vbuffer = {0};
 
+   cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
    hud->constants.color[0] = r;
    hud->constants.color[1] = g;
    hud->constants.color[2] = b;
@@ -95,7 +96,6 @@ hud_draw_colored_prims(struct hud_context *hud, unsigned prim,
 
    cso_set_vertex_buffers(cso, 0, 1, 0, false, &vbuffer);
    pipe_resource_reference(&vbuffer.buffer.resource, NULL);
-   cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
    cso_draw_arrays(cso, prim, 0, num_vertices);
 }
 
@@ -528,27 +528,28 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    viewport.swizzle_z = PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z;
    viewport.swizzle_w = PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
 
-   cso_set_framebuffer(cso, &fb);
-   cso_set_sample_mask(cso, ~0);
-   cso_set_min_samples(cso, 1);
    cso_set_depth_stencil_alpha(cso, &hud->dsa);
-   cso_set_rasterizer(cso, &hud->rasterizer);
-   cso_set_viewport(cso, &viewport);
-   cso_set_stream_outputs(cso, 0, NULL, NULL);
-   cso_set_tessctrl_shader_handle(cso, NULL);
-   cso_set_tesseval_shader_handle(cso, NULL);
+
+   cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
    cso_set_geometry_shader_handle(cso, NULL);
+   cso_set_tesseval_shader_handle(cso, NULL);
+   cso_set_tessctrl_shader_handle(cso, NULL);
    cso_set_vertex_shader_handle(cso, hud->vs_color);
-   cso_set_vertex_elements(cso, &hud->velems);
-   cso_set_render_condition(cso, NULL, FALSE, 0);
+
    pipe->set_sampler_views(pipe, PIPE_SHADER_FRAGMENT, 0, 1, 0, false,
                            &hud->font_sampler_view);
    cso_set_samplers(cso, PIPE_SHADER_FRAGMENT, 1, sampler_states);
-   pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
 
+   cso_set_framebuffer(cso, &fb);
    /* draw accumulated vertices for background quads */
    cso_set_blend(cso, &hud->alpha_blend);
-   cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
+   cso_set_rasterizer(cso, &hud->rasterizer);
+   cso_set_sample_mask(cso, ~0);
+   cso_set_min_samples(cso, 1);
+   cso_set_viewport(cso, &viewport);
+   pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
+   cso_set_stream_outputs(cso, 0, NULL, NULL);
+   cso_set_render_condition(cso, NULL, FALSE, 0);
 
    if (hud->bg.num_vertices) {
       hud->constants.color[0] = 0;
@@ -563,21 +564,27 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
       pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
 
       cso_set_vertex_buffers(cso, 0, 1, 0, false, &hud->bg.vbuf);
+      cso_set_vertex_elements(cso, &hud->velems);
       cso_draw_arrays(cso, PIPE_PRIM_QUADS, 0, hud->bg.num_vertices);
    }
    pipe_resource_reference(&hud->bg.vbuf.buffer.resource, NULL);
 
    /* draw accumulated vertices for text */
    if (hud->text.num_vertices) {
+      cso_set_fragment_shader_handle(hud->cso, hud->fs_text);
       cso_set_vertex_shader_handle(cso, hud->vs_text);
       cso_set_vertex_buffers(cso, 0, 1, 0, false, &hud->text.vbuf);
-      cso_set_fragment_shader_handle(hud->cso, hud->fs_text);
       cso_draw_arrays(cso, PIPE_PRIM_QUADS, 0, hud->text.num_vertices);
    }
    pipe_resource_reference(&hud->text.vbuf.buffer.resource, NULL);
 
    if (hud->simple)
       goto done;
+
+   if (hud->whitelines.num_vertices) {
+      cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
+      cso_set_vertex_shader_handle(cso, hud->vs_color);
+   }
 
    /* draw accumulated vertices for white lines */
    cso_set_blend(cso, &hud->no_blend);
@@ -593,9 +600,7 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    pipe->set_constant_buffer(pipe, PIPE_SHADER_VERTEX, 0, false, &hud->constbuf);
 
    if (hud->whitelines.num_vertices) {
-      cso_set_vertex_shader_handle(cso, hud->vs_color);
       cso_set_vertex_buffers(cso, 0, 1, 0, false, &hud->whitelines.vbuf);
-      cso_set_fragment_shader_handle(hud->cso, hud->fs_color);
       cso_draw_arrays(cso, PIPE_PRIM_LINES, 0, hud->whitelines.num_vertices);
    }
    pipe_resource_reference(&hud->whitelines.vbuf.buffer.resource, NULL);
