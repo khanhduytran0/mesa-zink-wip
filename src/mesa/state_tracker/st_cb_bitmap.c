@@ -274,11 +274,15 @@ restore_render_state(struct gl_context *ctx)
    struct st_context *st = st_context(ctx);
    struct cso_context *cso = st->cso_context;
 
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS);
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_VERTEX_ARRAYS |
@@ -621,7 +625,11 @@ st_Bitmap(struct gl_context *ctx, GLint x, GLint y,
    if ((st->dirty | ctx->NewDriverState) & st->active_states &
        ~ST_NEW_CONSTANTS & ST_PIPELINE_RENDER_STATE_MASK ||
        st->gfx_shaders_may_be_dirty) {
+      if (st->pipe->set_prediction_mode)
+         st->pipe->set_prediction_mode(st->pipe, false);
       st_validate_state(st, ST_PIPELINE_META);
+      if (st->pipe->set_prediction_mode)
+         st->pipe->set_prediction_mode(st->pipe, true);
    }
 
    if (UseBitmapCache && accum_bitmap(ctx, x, y, width, height, unpack, bitmap))
@@ -673,8 +681,11 @@ st_DrawAtlasBitmaps(struct gl_context *ctx,
    }
 
    st_flush_bitmap_cache(st);
-
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
    st_validate_state(st, ST_PIPELINE_META);
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
    st_invalidate_readpix_cache(st);
 
    sv = st_create_texture_sampler_view(pipe, stObj->pt);

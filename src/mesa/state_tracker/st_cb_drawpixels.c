@@ -957,11 +957,15 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    }
 
    /* restore state */
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS);
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_VERTEX_ARRAYS |
@@ -1343,7 +1347,13 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
+
    st_validate_state(st, ST_PIPELINE_META);
+
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    clippedUnpack = *unpack;
    unpack = &clippedUnpack;

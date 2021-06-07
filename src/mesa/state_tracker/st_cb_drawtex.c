@@ -176,7 +176,13 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
 
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
+
    st_validate_state(st, ST_PIPELINE_META);
+
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 
    /* determine if we need vertex color */
    if (ctx->FragmentProgram._Current->info.inputs_read & VARYING_BIT_COL0)
@@ -346,9 +352,12 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
    st->last_num_vbuffers = MAX2(st->last_num_vbuffers, 1);
 
    pipe_resource_reference(&vbuffer, NULL);
-
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
    /* restore state */
    cso_restore_state(cso, 0);
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
    ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_VERTEX_ARRAYS;
 }

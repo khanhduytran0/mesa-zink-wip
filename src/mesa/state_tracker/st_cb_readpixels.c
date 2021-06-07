@@ -260,11 +260,15 @@ try_pbo_readpixels(struct st_context *st, struct st_renderbuffer *strb,
    pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
 
 fail:
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS | CSO_UNBIND_FS_IMAGE0);
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    st->ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_FS_CONSTANTS |
@@ -435,10 +439,16 @@ st_ReadPixels(struct gl_context *ctx, GLint x, GLint y,
    ubyte *map = NULL;
    int dst_x, dst_y;
 
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
+
    /* Validate state (to be sure we have up-to-date framebuffer surfaces)
     * and flush the bitmap cache prior to reading. */
    st_validate_state(st, ST_PIPELINE_UPDATE_FRAMEBUFFER);
    st_flush_bitmap_cache(st);
+
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    if (!st->prefer_blit_based_texture_transfer) {
       goto fallback;

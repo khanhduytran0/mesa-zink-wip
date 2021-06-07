@@ -1663,11 +1663,15 @@ try_pbo_upload_common(struct gl_context *ctx,
    success = st_pbo_draw(st, addr, surface->width, surface->height);
 
 fail:
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, false);
    /* Unbind all because st/mesa won't do it if the current shader doesn't
     * use them.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS);
    st->state.num_sampler_views[PIPE_SHADER_FRAGMENT] = 0;
+   if (st->pipe->set_prediction_mode)
+      st->pipe->set_prediction_mode(st->pipe, true);
 
    ctx->Array.NewVertexElements = true;
    st->dirty |= ST_NEW_VERTEX_ARRAYS |
