@@ -4052,6 +4052,13 @@ zink_emit_string_marker(struct pipe_context *pctx,
    free(temp);
 }
 
+static void
+zink_set_prediction_mode(struct pipe_context *pctx, bool enable)
+{
+   struct zink_context *ctx = zink_context(pctx);
+   ctx->prediction = enable;
+}
+
 struct pipe_context *
 zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 {
@@ -4138,6 +4145,7 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->base.flush_resource = zink_flush_resource;
 
    ctx->base.emit_string_marker = zink_emit_string_marker;
+   ctx->base.set_prediction_mode = zink_set_prediction_mode;
 
    zink_context_surface_init(&ctx->base);
    zink_context_resource_init(&ctx->base);

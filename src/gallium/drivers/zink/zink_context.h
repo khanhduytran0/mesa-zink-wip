@@ -355,6 +355,7 @@ struct zink_context {
    bool have_timelines;
 
    bool gfx_dirty;
+   bool prediction;
 
    bool is_device_lost;
    bool primitive_restart;
