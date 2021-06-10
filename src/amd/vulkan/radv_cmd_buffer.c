@@ -2470,9 +2470,8 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
    if (!framebuffer)
       return;
 
-   for (i = 0; i < 8; ++i) {
-      if (i >= subpass->color_count ||
-          subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED) {
+   for (i = 0; i < subpass->color_count; ++i) {
+      if (subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED) {
          radeon_set_context_reg(cmd_buffer->cs, R_028C70_CB_COLOR0_INFO + i * 0x3C,
                                 S_028C70_FORMAT(V_028C70_COLOR_INVALID));
          continue;
@@ -2492,6 +2491,11 @@ radv_emit_framebuffer_state(struct radv_cmd_buffer *cmd_buffer)
 
       radv_load_color_clear_metadata(cmd_buffer, iview, i);
    }
+   for (; i < cmd_buffer->state.last_subpass_color_count; i++) {
+      radeon_set_context_reg(cmd_buffer->cs, R_028C70_CB_COLOR0_INFO + i * 0x3C,
+                             S_028C70_FORMAT(V_028C70_COLOR_INVALID));
+   }
+   cmd_buffer->state.last_subpass_color_count = subpass->color_count;
 
    if (subpass->depth_stencil_attachment) {
       int idx = subpass->depth_stencil_attachment->attachment;
@@ -4377,6 +4381,7 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
    cmd_buffer->state.last_vertex_offset = -1;
    cmd_buffer->state.last_first_instance = -1;
    cmd_buffer->state.last_drawid = -1;
+   cmd_buffer->state.last_subpass_color_count = 8;
    cmd_buffer->state.predication_type = -1;
    cmd_buffer->state.last_sx_ps_downconvert = -1;
    cmd_buffer->state.last_sx_blend_opt_epsilon = -1;
