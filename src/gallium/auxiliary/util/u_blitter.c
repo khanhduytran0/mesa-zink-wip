@@ -636,6 +636,8 @@ void util_blitter_restore_vertex_states(struct blitter_context *blitter)
    struct pipe_context *pipe = ctx->base.pipe;
    unsigned i;
 
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
 
    /* Geometry shader. */
    if (ctx->has_geometry_shader) {
@@ -685,6 +687,8 @@ void util_blitter_restore_vertex_states(struct blitter_context *blitter)
 
       ctx->base.saved_num_so_targets = ~0;
    }
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 static void blitter_check_saved_fragment_states(ASSERTED struct blitter_context_priv *ctx)
@@ -698,6 +702,9 @@ void util_blitter_restore_fragment_states(struct blitter_context *blitter)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
+
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
 
    /* Fragment shader. */
    ctx->bind_fs_state(pipe, ctx->base.saved_fs);
@@ -735,6 +742,8 @@ void util_blitter_restore_fragment_states(struct blitter_context *blitter)
                                   blitter->saved_num_window_rectangles,
                                   blitter->saved_window_rectangles);
    }
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 static void blitter_check_saved_fb_state(ASSERTED struct blitter_context_priv *ctx)
@@ -755,22 +764,28 @@ void util_blitter_restore_render_cond(struct blitter_context *blitter)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
-
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
    if (ctx->base.saved_render_cond_query) {
       pipe->render_condition(pipe, ctx->base.saved_render_cond_query,
                              ctx->base.saved_render_cond_cond,
                              ctx->base.saved_render_cond_mode);
       ctx->base.saved_render_cond_query = NULL;
    }
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 void util_blitter_restore_fb_state(struct blitter_context *blitter)
 {
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
-
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
    pipe->set_framebuffer_state(pipe, &ctx->base.saved_fb_state);
    util_unreference_framebuffer_state(&ctx->base.saved_fb_state);
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 static void blitter_check_saved_textures(ASSERTED struct blitter_context_priv *ctx)
@@ -784,7 +799,8 @@ void util_blitter_restore_textures(struct blitter_context *blitter)
    struct blitter_context_priv *ctx = (struct blitter_context_priv*)blitter;
    struct pipe_context *pipe = ctx->base.pipe;
    unsigned i;
-
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
    /* Fragment sampler states. */
    pipe->bind_sampler_states(pipe, PIPE_SHADER_FRAGMENT, 0,
                              ctx->base.saved_num_sampler_states,
@@ -802,15 +818,20 @@ void util_blitter_restore_textures(struct blitter_context *blitter)
       ctx->base.saved_sampler_views[i] = NULL;
 
    ctx->base.saved_num_sampler_views = ~0;
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 void util_blitter_restore_constant_buffer_state(struct blitter_context *blitter)
 {
    struct pipe_context *pipe = blitter->pipe;
-
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, false);
    pipe->set_constant_buffer(pipe, PIPE_SHADER_FRAGMENT, blitter->cb_slot,
                              true, &blitter->saved_fs_constant_buffer);
    blitter->saved_fs_constant_buffer.buffer = NULL;
+   if (pipe->set_prediction_mode)
+      pipe->set_prediction_mode(pipe, true);
 }
 
 static void blitter_set_rectangle(struct blitter_context_priv *ctx,
@@ -2087,6 +2108,10 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
    blitter_check_saved_fb_state(ctx);
    blitter_disable_render_cond(ctx);
 
+   if (pipe->set_prediction_mode)
+      /* TODO: would be great to remove this */
+      pipe->set_prediction_mode(pipe, false);
+
    /* Blend, DSA, fragment shader. */
    if (dst_has_depth && dst_has_stencil) {
       pipe->bind_blend_state(pipe, ctx->blend[0][0]);
@@ -2218,6 +2243,9 @@ void util_blitter_blit_generic(struct blitter_context *blitter,
       pipe->set_scissor_states(pipe, 0, 1, &ctx->base.saved_scissor);
    }
 
+   if (pipe->set_prediction_mode)
+      /* TODO: would be great to remove this */
+      pipe->set_prediction_mode(pipe, true);
    util_blitter_restore_vertex_states(blitter);
    util_blitter_restore_fragment_states(blitter);
    util_blitter_restore_textures(blitter);
@@ -2294,6 +2322,10 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
    blitter_check_saved_fb_state(ctx);
    blitter_disable_render_cond(ctx);
 
+   if (pipe->set_prediction_mode)
+      /* TODO: would be great to remove this */
+      pipe->set_prediction_mode(pipe, false);
+
    /* Set states. */
    if (is_depth) {
       pipe->bind_blend_state(pipe, ctx->blend[0][0]);
@@ -2357,6 +2389,10 @@ void util_blitter_generate_mipmap(struct blitter_context *blitter,
       pipe_surface_reference(&dst_view, NULL);
       pipe_sampler_view_reference(&src_view, NULL);
    }
+
+   if (pipe->set_prediction_mode)
+      /* TODO: would be great to remove this */
+      pipe->set_prediction_mode(pipe, true);
 
    util_blitter_restore_vertex_states(blitter);
    util_blitter_restore_fragment_states(blitter);
@@ -3020,6 +3056,12 @@ util_blitter_stencil_fallback(struct blitter_context *blitter,
                  srcbox->x + srcbox->width, srcbox->y + srcbox->height,
                  srcbox->z, 0, true,
                  &coord);
+
+   if (pipe->set_prediction_mode) {
+      /* reset driver predictions since we're binding dsa after everything else */
+      pipe->set_prediction_mode(pipe, false);
+      pipe->set_prediction_mode(pipe, true);
+   }
 
    for (int i = 0; i < stencil_bits; ++i) {
       uint32_t mask = 1 << i;
