@@ -1217,6 +1217,10 @@ nine_update_state(struct NineDevice9 *device)
 
     DBG("changed state groups: %x\n", context->changed.group);
 
+    if (pipe->set_prediction_mode)
+       /* TODO: would be great to remove this */
+       pipe->set_prediction_mode(pipe, false);
+
     /* NOTE: We may want to use the cso cache for everything, or let
      * NineDevice9.RestoreNonCSOState actually set the states, then we wouldn't
      * have to care about state being clobbered here and could merge this back
@@ -1309,6 +1313,9 @@ nine_update_state(struct NineDevice9 *device)
             pipe->set_stencil_ref(pipe, ref);
         }
     }
+    if (pipe->set_prediction_mode)
+       /* TODO: would be great to remove this */
+       pipe->set_prediction_mode(pipe, true);
 
     context->changed.group &=
         (NINE_STATE_FF | NINE_STATE_VS_CONST | NINE_STATE_PS_CONST);
