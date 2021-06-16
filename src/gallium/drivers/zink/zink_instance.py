@@ -69,6 +69,7 @@ header_code = """
 #include "MoltenVK/vk_mvk_moltenvk.h"
 #endif
 
+struct pipe_screen;
 struct zink_screen;
 
 struct zink_instance_info {
@@ -88,6 +89,9 @@ zink_create_instance(struct zink_instance_info *instance_info);
 
 void
 zink_verify_instance_extensions(struct zink_screen *screen);
+
+VkInstance
+zink_screen_get_instance(struct pipe_screen *screen);
 
 /* stub functions that get inserted into the dispatch table if they are not
  * properly loaded.

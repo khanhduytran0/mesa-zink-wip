@@ -330,6 +330,7 @@ drisw_allocate_textures(struct dri_context *stctx,
 {
    struct dri_screen *screen = dri_screen(drawable->sPriv);
    const __DRIswrastLoaderExtension *loader = drawable->dPriv->driScreenPriv->swrast_loader;
+   const __DRIcopperLoaderExtension *copper = drawable->dPriv->driScreenPriv->copper_loader;
    struct pipe_resource templ;
    unsigned width, height;
    boolean resized;
@@ -379,9 +380,15 @@ drisw_allocate_textures(struct dri_context *stctx,
       templ.nr_samples = 0;
       templ.nr_storage_samples = 0;
 
-      if (statts[i] == ST_ATTACHMENT_FRONT_LEFT &&
-          screen->base.screen->resource_create_front &&
-          loader->base.version >= 3) {
+      if (bind & PIPE_BIND_DISPLAY_TARGET &&
+          screen->base.screen->resource_create_drawable) {
+         drawable->textures[statts[i]] =
+            screen->base.screen->resource_create_drawable(screen->base.screen,
+                                                          &templ,
+                                                          drawable->dPriv);
+      } else if (statts[i] == ST_ATTACHMENT_FRONT_LEFT &&
+                 screen->base.screen->resource_create_front &&
+                 loader->base.version >= 3) {
          drawable->textures[statts[i]] =
             screen->base.screen->resource_create_front(screen->base.screen, &templ, (const void *)drawable);
       } else

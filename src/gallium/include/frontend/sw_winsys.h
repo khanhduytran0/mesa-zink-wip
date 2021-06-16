@@ -134,6 +134,9 @@ struct sw_winsys
    void 
    (*displaytarget_destroy)( struct sw_winsys *ws, 
                              struct sw_displaytarget *dt );
+
+   void *
+   (*get_loader)(struct sw_winsys *ws);
 };
 
 

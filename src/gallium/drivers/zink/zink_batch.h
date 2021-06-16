@@ -74,8 +74,6 @@ struct zink_batch_state {
 
    struct util_queue_fence flush_completed;
 
-   struct pipe_resource *flush_res;
-
    struct set *programs;
 
    struct set *resources;

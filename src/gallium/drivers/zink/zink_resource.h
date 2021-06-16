@@ -98,8 +98,6 @@ struct zink_resource {
    enum pipe_format internal_format:16;
 
    struct zink_resource_object *obj;
-   struct zink_resource_object *scanout_obj; //TODO: remove for wsi
-   bool scanout_obj_init;
    union {
       struct {
          struct util_range valid_buffer_range;

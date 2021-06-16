@@ -125,7 +125,15 @@ DEFINE_LOADER_DRM_ENTRYPOINT(lima)
 #endif
 
 #if defined(GALLIUM_ZINK) && !defined(__APPLE__)
-DEFINE_LOADER_DRM_ENTRYPOINT(zink);
+const __DRIextension **__driDriverGetExtensions_zink(void);
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)
+{
+   globalDriverAPI = &galliumvk_driver_api;
+   // hmm
+   return galliumsw_driver_extensions;
+}
+
 #endif
 
 #if defined(GALLIUM_D3D12)

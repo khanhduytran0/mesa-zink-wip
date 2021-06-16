@@ -33,6 +33,7 @@
 #include "drisw_priv.h"
 #include <X11/extensions/shmproto.h>
 #include <assert.h>
+#include "util/debug.h"
 
 static int xshm_error = 0;
 static int xshm_opcode = -1;
@@ -354,11 +355,6 @@ static const __DRIswrastLoaderExtension swrastLoaderExtension_shm = {
    .getImageShm2        = swrastGetImageShm2,
 };
 
-static const __DRIextension *loader_extensions_shm[] = {
-   &swrastLoaderExtension_shm.base,
-   NULL
-};
-
 static const __DRIswrastLoaderExtension swrastLoaderExtension = {
    .base = {__DRI_SWRAST_LOADER, 3 },
 
@@ -369,8 +365,40 @@ static const __DRIswrastLoaderExtension swrastLoaderExtension = {
    .getImage2           = swrastGetImage2,
 };
 
+#include "copper_interface.h"
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_xcb.h>
+
+// void?
+static VkResult
+copperSetSurfaceCreateInfo(void *_draw, VkBaseOutStructure *out)
+{
+    __GLXDRIdrawable *draw = _draw;
+    VkXcbSurfaceCreateInfoKHR *xsci = (VkXcbSurfaceCreateInfoKHR *)out;
+
+    xsci->sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+    xsci->pNext = NULL;
+    xsci->flags = 0;
+    xsci->connection = XGetXCBConnection(draw->psc->dpy);
+    xsci->window = draw->xDrawable; // i think?
+    return VK_SUCCESS;
+}
+
+static const __DRIcopperLoaderExtension copperLoaderExtension = {
+    .base = { __DRI_COPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = copperSetSurfaceCreateInfo,
+};
+
+static const __DRIextension *loader_extensions_shm[] = {
+   &swrastLoaderExtension_shm.base,
+   &copperLoaderExtension.base,
+   NULL
+};
+
 static const __DRIextension *loader_extensions_noshm[] = {
    &swrastLoaderExtension.base,
+   &copperLoaderExtension.base,
    NULL
 };
 
@@ -715,12 +743,11 @@ driswDestroyScreen(struct glx_screen *base)
    free(psc);
 }
 
-#define SWRAST_DRIVER_NAME "swrast"
-
 static char *
 drisw_get_driver_name(struct glx_screen *glx_screen)
 {
-    return strdup(SWRAST_DRIVER_NAME);
+   struct drisw_screen *psc = (struct drisw_screen *) glx_screen;
+   return strdup(psc->name);
 }
 
 static const struct glx_screen_vtable drisw_screen_vtable = {
@@ -810,7 +837,8 @@ check_xshm(Display *dpy)
 }
 
 static struct glx_screen *
-driswCreateScreen(int screen, struct glx_display *priv)
+driswCreateScreenDriver(int screen, struct glx_display *priv,
+                        const char *driver)
 {
    __GLXDRIscreen *psp;
    const __DRIconfig **driver_configs;
@@ -829,9 +857,10 @@ driswCreateScreen(int screen, struct glx_display *priv)
       return NULL;
    }
 
-   extensions = driOpenDriver(SWRAST_DRIVER_NAME, &psc->driver);
+   extensions = driOpenDriver(driver, &psc->driver);
    if (extensions == NULL)
       goto handle_error;
+   psc->name = driver;
 
    if (!check_xshm(psc->base.dpy))
       loader_extensions_local = loader_extensions_noshm;
@@ -914,9 +943,28 @@ driswCreateScreen(int screen, struct glx_display *priv)
    glx_screen_cleanup(&psc->base);
    free(psc);
 
-   CriticalErrorMessageF("failed to load driver: %s\n", SWRAST_DRIVER_NAME);
+   CriticalErrorMessageF("failed to load driver: %s\n", driver);
 
    return NULL;
+}
+
+static struct glx_screen *
+driswCreateScreen(int screen, struct glx_display *priv)
+{
+#if 1
+   if (!env_var_as_boolean("LIBGL_COPPER_DISABLE", false)) {
+      struct glx_screen *zink = NULL;
+      void *libvulkan = dlopen("libvulkan.so.1", RTLD_LAZY);
+
+      if (libvulkan)
+         zink = driswCreateScreenDriver(screen, priv, "zink");
+
+      if (zink)
+         return zink;
+   }
+#endif
+
+    return driswCreateScreenDriver(screen, priv, "swrast");
 }
 
 /* Called from __glXFreeDisplayPrivate.

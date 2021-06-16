@@ -40,7 +40,7 @@
 #ifndef DRI_INTERFACE_H
 #define DRI_INTERFACE_H
 
-#ifdef HAVE_LIBDRM
+#if 0 // def HAVE_LIBDRM
 #include <drm.h>
 #else
 typedef unsigned int drm_context_t;

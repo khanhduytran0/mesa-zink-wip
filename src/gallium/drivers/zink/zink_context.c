@@ -3359,8 +3359,8 @@ zink_flush_resource(struct pipe_context *pctx,
    /* TODO: this is not futureproof and should be updated once proper
     * WSI support is added
     */
-   if (pres->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT))
-      pipe_resource_reference(&ctx->batch.state->flush_res, pres);
+   //if (pres->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT))
+      //pipe_resource_reference(&ctx->batch.state->flush_res, pres);
 }
 
 void

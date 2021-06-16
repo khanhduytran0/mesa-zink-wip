@@ -41,6 +41,7 @@
 #include "frontend/opencl_interop.h"
 #include "os/os_thread.h"
 #include "postprocess/filters.h"
+#include "copper_interface.h" // XXX...
 
 struct dri_context;
 struct dri_drawable;
@@ -106,6 +107,12 @@ dri_screen(__DRIscreen * sPriv)
    return (struct dri_screen *)sPriv->driverPrivate;
 }
 
+static inline const __DRIcopperLoaderExtension *
+dri_screen_get_copper(struct dri_screen *screen)
+{
+   return screen->sPriv->copper_loader;
+}
+
 struct __DRIimageRec {
    struct pipe_resource *texture;
    unsigned level;
@@ -165,6 +172,8 @@ extern const struct __DriverAPIRec galliumdrm_driver_api;
 extern const __DRIextension *galliumdrm_driver_extensions[];
 extern const struct __DriverAPIRec galliumsw_driver_api;
 extern const __DRIextension *galliumsw_driver_extensions[];
+extern const struct __DriverAPIRec galliumvk_driver_api;
+extern const __DRIextension *galliumvk_driver_extensions[];
 extern const __DRIconfigOptionsExtension gallium_config_options;
 
 #endif
