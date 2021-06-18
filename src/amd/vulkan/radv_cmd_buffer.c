@@ -1022,16 +1022,10 @@ radv_emit_inline_push_consts(struct radv_cmd_buffer *cmd_buffer, struct radv_pip
 }
 
 static void
-radv_update_multisample_state(struct radv_cmd_buffer *cmd_buffer, struct radv_pipeline *pipeline)
+radv_update_multisample_state(struct radv_cmd_buffer *cmd_buffer)
 {
+   struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
    int num_samples = pipeline->graphics.ms.num_samples;
-   struct radv_pipeline *old_pipeline = cmd_buffer->state.emitted_pipeline;
-
-   if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.needs_sample_positions)
-      cmd_buffer->sample_positions_needed = true;
-
-   if (old_pipeline && num_samples == old_pipeline->graphics.ms.num_samples)
-      return;
 
    radv_emit_default_sample_locations(cmd_buffer->cs, num_samples);
 
@@ -1309,7 +1303,6 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
    if (!pipeline || cmd_buffer->state.emitted_pipeline == pipeline)
       return;
 
-   radv_update_multisample_state(cmd_buffer, pipeline);
    radv_update_binning_state(cmd_buffer, pipeline);
 
    cmd_buffer->scratch_size_per_wave_needed =
@@ -4388,6 +4381,7 @@ radv_BeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBegi
    cmd_buffer->state.last_sx_blend_opt_control = -1;
    cmd_buffer->state.last_nggc_settings = -1;
    cmd_buffer->state.last_nggc_settings_sgpr_idx = -1;
+   cmd_buffer->state.last_num_samples = -1;
    cmd_buffer->usage_flags = pBeginInfo->flags;
 
    if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
@@ -4918,6 +4912,12 @@ radv_CmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipeline
           * GS ring pointers are set.
           */
          cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_VGT_FLUSH;
+      }
+
+      cmd_buffer->sample_positions_needed = pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.needs_sample_positions;
+      if (cmd_buffer->state.last_num_samples != pipeline->graphics.ms.num_samples) {
+         cmd_buffer->state.dirty |= RADV_CMD_DIRTY_MSAA;
+         cmd_buffer->state.last_num_samples = pipeline->graphics.ms.num_samples;
       }
 
       radv_bind_dynamic_state(cmd_buffer, &pipeline->dynamic_state);
@@ -6569,6 +6569,11 @@ radv_emit_all_graphics_states(struct radv_cmd_buffer *cmd_buffer, const struct r
          cmd_buffer->state.last_index_type = -1;
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_INDEX_BUFFER;
       }
+   }
+
+   if (cmd_buffer->state.dirty & RADV_CMD_DIRTY_MSAA) {
+      radv_update_multisample_state(cmd_buffer);
+      cmd_buffer->state.dirty &= ~RADV_CMD_DIRTY_MSAA;
    }
 
    radv_cmd_buffer_flush_dynamic_state(cmd_buffer, pipeline_is_dirty);

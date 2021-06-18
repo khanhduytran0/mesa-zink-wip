@@ -1060,6 +1060,7 @@ enum radv_cmd_dirty_bits {
    RADV_CMD_DIRTY_VERTEX_BUFFER = 1ull << 33,
    RADV_CMD_DIRTY_STREAMOUT_BUFFER = 1ull << 34,
    RADV_CMD_DIRTY_VERTEX_STATE = RADV_CMD_DIRTY_VERTEX_BUFFER | RADV_CMD_DIRTY_DYNAMIC_VERTEX_INPUT,
+   RADV_CMD_DIRTY_MSAA = 1ull << 35,
 };
 
 enum radv_cmd_flush_bits {
@@ -1396,6 +1397,7 @@ struct radv_cmd_state {
    unsigned active_pipeline_gds_queries;
    uint32_t trace_id;
    uint32_t last_ia_multi_vgt_param;
+   int last_num_samples;
 
    uint32_t last_num_instances;
    uint32_t last_first_instance;
