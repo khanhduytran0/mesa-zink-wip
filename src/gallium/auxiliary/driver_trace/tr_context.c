@@ -731,6 +731,18 @@ TRACE_SHADER_STATE(tes)
 
 #undef TRACE_SHADER_STATE
 
+static void
+trace_context_precompile_program(struct pipe_context *_pipe, void **shaders, unsigned shader_mask)
+{
+   struct trace_context *tr_ctx = trace_context(_pipe);
+   struct pipe_context *pipe = tr_ctx->pipe;
+
+   trace_dump_call_begin("pipe_context", "precompile_program");
+   trace_dump_arg(ptr, pipe);
+   trace_dump_arg(uint, shader_mask);
+   pipe->precompile_program(pipe, shaders, shader_mask);
+   trace_dump_call_end();
+}
 
 static inline void *
 trace_context_create_compute_state(struct pipe_context *_pipe,
@@ -2319,6 +2331,7 @@ trace_context_create(struct trace_screen *tr_scr,
    TR_CTX_INIT(create_compute_state);
    TR_CTX_INIT(bind_compute_state);
    TR_CTX_INIT(delete_compute_state);
+   TR_CTX_INIT(precompile_program);
    TR_CTX_INIT(create_vertex_elements_state);
    TR_CTX_INIT(bind_vertex_elements_state);
    TR_CTX_INIT(delete_vertex_elements_state);

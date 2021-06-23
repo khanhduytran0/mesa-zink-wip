@@ -900,6 +900,8 @@ st_link_nir(struct gl_context *ctx,
       prev_info = info;
    }
 
+   void *driver_shaders[PIPE_SHADER_TYPES] = {0};
+   unsigned mask = 0;
    for (unsigned i = 0; i < num_shaders; i++) {
       struct gl_linked_shader *shader = linked_shader[i];
       struct gl_program *prog = shader->Program;
@@ -931,12 +933,18 @@ st_link_nir(struct gl_context *ctx,
       st_store_ir_in_disk_cache(st, prog, true);
 
       st_release_variants(st, stp);
-      st_finalize_program(st, prog);
+
+      enum pipe_shader_type type = pipe_shader_type_from_mesa(old_info.stage);
+      if (type != PIPE_SHADER_COMPUTE)
+      mask |= BITFIELD_BIT(type);
+      driver_shaders[type] = st_finalize_program(st, prog);
 
       /* The GLSL IR won't be needed anymore. */
       ralloc_free(shader->ir);
       shader->ir = NULL;
    }
+   if (mask && st->pipe->precompile_program)
+      st->pipe->precompile_program(st->pipe, driver_shaders, mask);
 
    return true;
 }

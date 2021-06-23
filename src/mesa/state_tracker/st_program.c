@@ -1988,7 +1988,7 @@ is_last_vertex_stage(struct gl_context *ctx, struct gl_program *prog)
 /**
  * Compile one shader variant.
  */
-static void
+static void *
 st_precompile_shader_variant(struct st_context *st,
                              struct gl_program *prog)
 {
@@ -2019,7 +2019,9 @@ st_precompile_shader_variant(struct st_context *st,
             key.export_point_size = st->lower_point_size && is_last_vertex_stage(st->ctx, prog);
       }
       key.st = st->has_shareable_shaders ? NULL : st;
-      st_get_common_variant(st, p, &key);
+      struct st_common_variant *v = st_get_common_variant(st, p, &key);
+      if (v)
+         return v->base.driver_shader;
       break;
    }
 
@@ -2035,13 +2037,16 @@ st_precompile_shader_variant(struct st_context *st,
          for (int i = 0; i < ARRAY_SIZE(key.texture_index); i++)
             key.texture_index[i] = TEXTURE_2D_INDEX;
       }
-      st_get_fp_variant(st, p, &key);
+      struct st_fp_variant *fpv = st_get_fp_variant(st, p, &key);
+      if (fpv)
+         return fpv->base.driver_shader;
       break;
    }
 
    default:
       assert(0);
    }
+   return NULL;
 }
 
 void
@@ -2058,7 +2063,7 @@ st_serialize_nir(struct st_program *stp)
    }
 }
 
-void
+void *
 st_finalize_program(struct st_context *st, struct gl_program *prog)
 {
    if (st->current_program[prog->info.stage] == prog) {
@@ -2081,5 +2086,5 @@ st_finalize_program(struct st_context *st, struct gl_program *prog)
    }
 
    /* Always create the default variant of the program. */
-   st_precompile_shader_variant(st, prog);
+   return st_precompile_shader_variant(st, prog);
 }

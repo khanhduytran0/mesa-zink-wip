@@ -374,6 +374,7 @@ struct pipe_context {
                               const struct pipe_shader_state *);
    void   (*bind_tes_state)(struct pipe_context *, void *);
    void   (*delete_tes_state)(struct pipe_context *, void *);
+   void   (*precompile_program)(struct pipe_context *, void **, unsigned);
 
    void * (*create_vertex_elements_state)(struct pipe_context *,
                                           unsigned num_elements,

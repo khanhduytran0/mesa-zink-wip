@@ -374,7 +374,7 @@ st_translate_common_program(struct st_context *st,
 extern void
 st_serialize_nir(struct st_program *stp);
 
-extern void
+extern void *
 st_finalize_program(struct st_context *st, struct gl_program *prog);
 
 struct pipe_shader_state *
