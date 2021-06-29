@@ -109,7 +109,10 @@ zink_get_name(struct pipe_screen *pscreen)
 {
    struct zink_screen *screen = zink_screen(pscreen);
    static char buf[1000];
-   snprintf(buf, sizeof(buf), "zink (%s)", screen->info.props.deviceName);
+   if (getenv("ZINK_SPOOF"))
+      snprintf(buf, sizeof(buf), "Awesome Driver (No Bugs!)");
+   else
+      snprintf(buf, sizeof(buf), "zink (%s)", screen->info.props.deviceName);
    return buf;
 }
 
