@@ -304,7 +304,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
       return 16; // XXX: u_screen says 256 is the minimum value...
    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
-      return PIPE_TEXTURE_TRANSFER_BLIT;
+      return PIPE_TEXTURE_TRANSFER_BLIT | PIPE_TEXTURE_TRANSFER_COMPUTE;
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return IRIS_MAX_TEXTURE_BUFFER_SIZE;
    case PIPE_CAP_MAX_VIEWPORTS:
@@ -599,6 +599,20 @@ iris_get_compute_param(struct pipe_screen *pscreen,
    }
 }
 
+static bool
+iris_is_compute_copy_faster(struct pipe_screen *pscreen,
+                            enum pipe_format src_format,
+                            enum pipe_format dst_format,
+                            unsigned width,
+                            unsigned height,
+                            unsigned depth,
+                            bool cpu)
+{
+   if (cpu)
+      return width * height * depth > 64 * 64;
+   return false;
+}
+
 static uint64_t
 iris_get_timestamp(struct pipe_screen *pscreen)
 {
@@ -871,6 +885,7 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    pscreen->get_device_uuid = iris_get_device_uuid;
    pscreen->get_driver_uuid = iris_get_driver_uuid;
    pscreen->get_disk_shader_cache = iris_get_disk_shader_cache;
+   pscreen->is_compute_copy_faster = iris_is_compute_copy_faster;
    pscreen->is_format_supported = iris_is_format_supported;
    pscreen->context_create = iris_create_context;
    pscreen->flush_frontbuffer = iris_flush_frontbuffer;
