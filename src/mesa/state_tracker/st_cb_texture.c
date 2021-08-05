@@ -2524,6 +2524,8 @@ st_GetTexSubImage(struct gl_context * ctx,
           texImage->TexFormat != MESA_FORMAT_ETC1_RGB8);
 
    st_flush_bitmap_cache(st);
+   if (getenv("MESA_COMPUTE_PBO"))
+      goto non_blit_transfer;
 
    /* GetTexImage only returns a single face for cubemaps. */
    if (gl_target == GL_TEXTURE_CUBE_MAP) {
