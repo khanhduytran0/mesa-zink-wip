@@ -195,6 +195,53 @@ zink_decompose_vertex_format(enum pipe_format format)
    return new_format;
 }
 
+enum pipe_format
+zink_expand_vertex_format(enum pipe_format format)
+{
+   const struct util_format_description *desc = util_format_description(format);
+   unsigned first_non_void = util_format_get_first_non_void_channel(format);
+   enum pipe_format new_format;
+   assert(first_non_void == 0);
+   if (!desc->is_array)
+      return PIPE_FORMAT_NONE;
+   if (desc->is_unorm) {
+      enum pipe_format unorm_formats[] = {
+         PIPE_FORMAT_R8G8B8A8_UNORM,
+         PIPE_FORMAT_R16G16B16A16_UNORM,
+         PIPE_FORMAT_R32G32B32A32_UNORM
+      };
+      return unorm_formats[desc->channel[first_non_void].size >> 4];
+   } else if (desc->is_snorm) {
+      enum pipe_format snorm_formats[] = {
+         PIPE_FORMAT_R8G8B8A8_SNORM,
+         PIPE_FORMAT_R16G16B16A16_SNORM,
+         PIPE_FORMAT_R32G32B32A32_SNORM
+      };
+      return snorm_formats[desc->channel[first_non_void].size >> 4];
+   } else {
+      enum pipe_format uint_formats[][3] = {
+         {PIPE_FORMAT_R8G8B8A8_USCALED, PIPE_FORMAT_R16G16B16A16_USCALED, PIPE_FORMAT_R32G32B32A32_USCALED},
+         {PIPE_FORMAT_R8G8B8A8_UINT, PIPE_FORMAT_R16G16B16A16_UINT, PIPE_FORMAT_R32G32B32A32_UINT},
+      };
+      enum pipe_format sint_formats[][3] = {
+         {PIPE_FORMAT_R8G8B8A8_SSCALED, PIPE_FORMAT_R16G16B16A16_SSCALED, PIPE_FORMAT_R32G32B32A32_SSCALED},
+         {PIPE_FORMAT_R8G8B8A8_SINT, PIPE_FORMAT_R16G16B16A16_SINT, PIPE_FORMAT_R32G32B32A32_SINT},
+      };
+      switch (desc->channel[first_non_void].type) {
+      case UTIL_FORMAT_TYPE_UNSIGNED:
+         return uint_formats[desc->channel[first_non_void].pure_integer][desc->channel[first_non_void].size >> 4];
+      case UTIL_FORMAT_TYPE_SIGNED:
+         return sint_formats[desc->channel[first_non_void].pure_integer][desc->channel[first_non_void].size >> 4];
+      case UTIL_FORMAT_TYPE_FLOAT:
+         return desc->channel[first_non_void].size == 16 ? PIPE_FORMAT_R16G16B16A16_FLOAT : PIPE_FORMAT_R32G32B32A32_FLOAT;
+         break;
+      default:
+         return PIPE_FORMAT_NONE;
+      }
+   }
+   return new_format;
+}
+
 VkFormat
 zink_pipe_format_to_vk_format(enum pipe_format format)
 {
