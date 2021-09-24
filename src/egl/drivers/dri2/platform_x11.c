@@ -286,9 +286,6 @@ dri2_x11_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
       goto cleanup_pixmap;
    }
 
-   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
-      goto cleanup_pixmap;
-
    if (type != EGL_PBUFFER_BIT) {
       cookie = xcb_get_geometry (dri2_dpy->conn, dri2_surf->drawable);
       reply = xcb_get_geometry_reply (dri2_dpy->conn, cookie, &error);
@@ -312,6 +309,9 @@ dri2_x11_create_surface(_EGLDisplay *disp, EGLint type, _EGLConfig *conf,
       dri2_surf->depth = reply->depth;
       free(reply);
    }
+
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
+      goto cleanup_pixmap;
 
    if (dri2_dpy->dri2) {
       xcb_void_cookie_t cookie;
@@ -1206,18 +1206,26 @@ static const __DRIswrastLoaderExtension swrast_loader_extension = {
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_xcb.h>
 
+struct copper_info {
+   VkXcbSurfaceCreateInfoKHR xsci;
+   bool has_alpha;
+};
+
 static void
-copperSetSurfaceCreateInfo(void *_draw, VkBaseOutStructure *out)
+copperSetSurfaceCreateInfo(void *_draw, const struct gl_config *visual, void *out)
 {
     struct dri2_egl_surface *dri2_surf = _draw;
     struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
-    VkXcbSurfaceCreateInfoKHR *xsci = (VkXcbSurfaceCreateInfoKHR *)out;
+    struct copper_info *ci = out;
 
-    xsci->sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-    xsci->pNext = NULL;
-    xsci->flags = 0;
-    xsci->connection = dri2_dpy->conn;
-    xsci->window = dri2_surf->drawable;
+    if (dri2_surf->base.Type != EGL_WINDOW_BIT)
+       return;
+    ci->xsci.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+    ci->xsci.pNext = NULL;
+    ci->xsci.flags = 0;
+    ci->xsci.connection = dri2_dpy->conn;
+    ci->xsci.window = dri2_surf->drawable;
+    ci->has_alpha = dri2_surf->depth == 32;
 }
 
 static const __DRIcopperLoaderExtension copper_loader_extension = {

@@ -92,11 +92,13 @@ struct __DRIcopperExtensionRec {
  */
 #define __DRI_COPPER_LOADER "DRI_CopperLoader"
 #define __DRI_COPPER_LOADER_VERSION 0
+struct gl_config;
 struct __DRIcopperLoaderExtensionRec {
     __DRIextension base;
 
-    VkResult (*SetSurfaceCreateInfo)(void *draw,
-                                     VkBaseOutStructure *out);
+    void (*SetSurfaceCreateInfo)(void *draw,
+                                 const struct gl_config *visual,
+                                 void *out);
     void (*GetDrawableInfo)(__DRIdrawable *draw, int *w, int *h,
                             void *closure);
 };

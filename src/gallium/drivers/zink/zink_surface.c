@@ -26,6 +26,7 @@
 #include "zink_resource.h"
 #include "zink_screen.h"
 #include "zink_surface.h"
+#include "zink_copper.h"
 
 #include "util/format/u_format.h"
 #include "util/u_inlines.h"
@@ -111,7 +112,12 @@ init_surface_info(struct zink_surface *surface, struct zink_resource *res, VkIma
    surface->info.width = surface->base.width;
    surface->info.height = surface->base.height;
    surface->info.layerCount = ivci->subresourceRange.layerCount;
-   surface->info.format = ivci->format;
+   surface->info.format[0] = ivci->format;
+   if (res->obj->dt) {
+      struct copper_displaytarget *cdt = res->obj->dt;
+      if (zink_copper_has_srgb(cdt))
+         surface->info.format[1] = ivci->format == cdt->formats[0] ? cdt->formats[1] : cdt->formats[0];
+   }
    surface->info_hash = _mesa_hash_data(&surface->info, sizeof(surface->info));
 }
 
@@ -119,7 +125,8 @@ static struct zink_surface *
 create_surface(struct pipe_context *pctx,
                struct pipe_resource *pres,
                const struct pipe_surface *templ,
-               VkImageViewCreateInfo *ivci)
+               VkImageViewCreateInfo *ivci,
+               bool actually)
 {
    struct zink_screen *screen = zink_screen(pctx->screen);
    struct zink_resource *res = zink_resource(pres);
@@ -147,6 +154,9 @@ create_surface(struct pipe_context *pctx,
 
    init_surface_info(surface, res, ivci);
 
+   if (!actually)
+      return surface;
+   assert(ivci->image);
    if (VKSCR(CreateImageView)(screen->dev, ivci, NULL,
                          &surface->image_view) != VK_SUCCESS) {
       FREE(surface);
@@ -160,6 +170,17 @@ static uint32_t
 hash_ivci(const void *key)
 {
    return _mesa_hash_data((char*)key + offsetof(VkImageViewCreateInfo, flags), sizeof(VkImageViewCreateInfo) - offsetof(VkImageViewCreateInfo, flags));
+}
+
+static struct zink_surface *
+do_create_surface(struct pipe_context *pctx, struct pipe_resource *pres, const struct pipe_surface *templ, VkImageViewCreateInfo *ivci, uint32_t hash, bool actually)
+{
+   /* create a new surface */
+   struct zink_surface *surface = create_surface(pctx, pres, templ, ivci, actually);
+   surface->base.nr_samples = 0;
+   surface->hash = hash;
+   surface->ivci = *ivci;
+   return surface;
 }
 
 struct pipe_surface *
@@ -177,10 +198,7 @@ zink_get_surface(struct zink_context *ctx,
 
    if (!entry) {
       /* create a new surface */
-      surface = create_surface(&ctx->base, pres, templ, ivci);
-      surface->base.nr_samples = 0;
-      surface->hash = hash;
-      surface->ivci = *ivci;
+      surface = do_create_surface(&ctx->base, pres, templ, ivci, hash, true);
       entry = _mesa_hash_table_insert_pre_hashed(&res->surface_cache, hash, &surface->ivci, surface);
       if (!entry) {
          simple_mtx_unlock(&res->surface_mtx);
@@ -214,13 +232,22 @@ zink_create_surface(struct pipe_context *pctx,
                     struct pipe_resource *pres,
                     const struct pipe_surface *templ)
 {
-
+   struct zink_resource *res = zink_resource(pres);
    VkImageViewCreateInfo ivci = create_ivci(zink_screen(pctx->screen),
-                                            zink_resource(pres), templ, pres->target);
+                                            res, templ, pres->target);
    if (pres->target == PIPE_TEXTURE_3D)
       ivci.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
-   struct pipe_surface *psurf = zink_get_surface(zink_context(pctx), pres, templ, &ivci);
+   struct pipe_surface *psurf = NULL;
+   if (res->obj->dt) {
+      /* don't cache swapchain surfaces. that's weird. */
+      struct zink_surface *surface = do_create_surface(pctx, pres, templ, &ivci, 0, false);
+      if (surface) {
+         surface->is_swapchain = true;
+         psurf = &surface->base;
+      }
+   } else
+      psurf = zink_get_surface(zink_context(pctx), pres, templ, &ivci);
    if (!psurf)
       return NULL;
 
@@ -235,7 +262,7 @@ zink_create_surface(struct pipe_context *pctx,
       if (!transient)
          return NULL;
       ivci.image = transient->obj->image;
-      csurf->transient = (struct zink_ctx_surface*)wrap_surface(pctx, (struct pipe_surface*)create_surface(pctx, &transient->base.b, templ, &ivci));
+      csurf->transient = (struct zink_ctx_surface*)wrap_surface(pctx, (struct pipe_surface*)create_surface(pctx, &transient->base.b, templ, &ivci, true));
       if (!csurf->transient) {
          pipe_resource_reference((struct pipe_resource**)&transient, NULL);
          pipe_surface_release(pctx, &psurf);
@@ -279,7 +306,7 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
 {
    struct zink_surface *surface = zink_surface(psurface);
    struct zink_resource *res = zink_resource(psurface->texture);
-   if (!psurface->nr_samples) {
+   if (!psurface->nr_samples && !surface->is_swapchain) {
       simple_mtx_lock(&res->surface_mtx);
       if (psurface->reference.count) {
          /* got a cache hit during deletion */
@@ -296,10 +323,17 @@ zink_destroy_surface(struct zink_screen *screen, struct pipe_surface *psurface)
       surface_clear_fb_refs(screen, psurface);
    zink_descriptor_set_refs_clear(&surface->desc_set_refs, surface);
    util_dynarray_fini(&surface->framebuffer_refs);
-   pipe_resource_reference(&psurface->texture, NULL);
    if (surface->simage_view)
       VKSCR(DestroyImageView)(screen->dev, surface->simage_view, NULL);
-   VKSCR(DestroyImageView)(screen->dev, surface->image_view, NULL);
+   if (surface->is_swapchain) {
+      for (unsigned i = 0; i < surface->old_swapchain_size; i++)
+         VKSCR(DestroyImageView)(screen->dev, surface->old_swapchain[i], NULL);
+      for (unsigned i = 0; i < surface->swapchain_size; i++)
+         VKSCR(DestroyImageView)(screen->dev, surface->swapchain[i], NULL);
+      free(surface->swapchain);
+   } else
+      VKSCR(DestroyImageView)(screen->dev, surface->image_view, NULL);
+   pipe_resource_reference(&psurface->texture, NULL);
    FREE(surface);
 }
 
@@ -321,6 +355,7 @@ zink_rebind_surface(struct zink_context *ctx, struct pipe_surface **psurface)
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    if (surface->simage_view)
       return false;
+   assert(!res->obj->dt);
    VkImageViewCreateInfo ivci = create_ivci(screen,
                                             zink_resource((*psurface)->texture), (*psurface), surface->base.texture->target);
    uint32_t hash = hash_ivci(&ivci);
@@ -395,4 +430,28 @@ zink_context_surface_init(struct pipe_context *context)
 {
    context->create_surface = zink_create_surface;
    context->surface_destroy = zink_surface_destroy;
+}
+
+void
+zink_surface_swapchain_update(struct zink_screen *screen, struct zink_surface *surface)
+{
+   struct zink_resource *res = zink_resource(surface->base.texture);
+   struct copper_displaytarget *cdt = res->obj->dt;
+   if (res->obj->dt != surface->dt) {
+      /* new swapchain: clear out previous old_swapchain and move current swapchain there */
+      for (unsigned i = 0; i < surface->old_swapchain_size; i++)
+         VKSCR(DestroyImageView)(screen->dev, surface->old_swapchain[i], NULL);
+      surface->old_swapchain = surface->swapchain;
+      surface->old_swapchain_size = surface->swapchain_size;
+      surface->swapchain_size = cdt->swapchain->num_images;
+      surface->swapchain = calloc(surface->swapchain_size, sizeof(VkImageView));
+      init_surface_info(surface, res, &surface->ivci);
+   }
+   if (!surface->swapchain[res->obj->dt_idx]) {
+      assert(res->obj->image && cdt->swapchain->images[res->obj->dt_idx] == res->obj->image);
+      surface->ivci.image = res->obj->image;
+      assert(surface->ivci.image);
+      VKSCR(CreateImageView)(screen->dev, &surface->ivci, NULL, &surface->swapchain[res->obj->dt_idx]);
+   }
+   surface->image_view = surface->swapchain[res->obj->dt_idx];
 }

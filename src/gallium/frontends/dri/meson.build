@@ -50,6 +50,18 @@ if with_gallium_softpipe
   libdri_c_args += '-DGALLIUM_SOFTPIPE'
 endif
 
+if with_platform_x11
+  libdri_c_args += '-DVK_USE_PLATFORM_XCB_KHR=1'
+endif
+
+if with_platform_wayland
+  libdri_c_args += '-DVK_USE_PLATFORM_WAYLAND_KHR=1'
+endif
+
+if with_platform_windows
+  libdri_c_args += '-DVK_USE_PLATFORM_WIN32_KHR=1'
+endif
+
 libdri = static_library(
   'dri',
   files_libdri,

@@ -158,9 +158,6 @@ struct zink_screen {
    unsigned renderdoc_capture_end;
 #endif
 
-   bool needs_mesa_wsi;
-   bool needs_mesa_flush_wsi;
-
    struct vk_dispatch_table vk;
 
    bool (*descriptor_program_init)(struct zink_context *ctx, struct zink_program *pg);
@@ -191,7 +188,6 @@ struct zink_screen {
 
    VkExtent2D maxSampleLocationGridSize[5];
 };
-
 
 /* update last_finished to account for batch_id wrapping */
 static inline void

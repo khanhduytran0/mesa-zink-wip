@@ -2057,9 +2057,35 @@ static const __DRIswrastLoaderExtension swrast_loader_extension = {
    .putImage2       = dri2_wl_swrast_put_image2,
 };
 
+// i don't belong here
+ 
+#include "copper_interface.h"
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_wayland.h>
+ 
+static void
+copperSetSurfaceCreateInfo(void *_draw, const struct gl_config *visual, void *out)
+{
+    struct dri2_egl_surface *dri2_surf = _draw;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+    VkWaylandSurfaceCreateInfoKHR *wlsci = (VkWaylandSurfaceCreateInfoKHR *)out;
+ 
+    wlsci->sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+    wlsci->pNext = NULL;
+    wlsci->flags = 0;
+    wlsci->display = dri2_dpy->wl_dpy;
+    wlsci->surface = dri2_surf->wl_surface_wrapper;
+}
+ 
+static const __DRIcopperLoaderExtension copper_loader_extension = {
+    .base = { __DRI_COPPER_LOADER, 1 },
+ 
+    .SetSurfaceCreateInfo   = copperSetSurfaceCreateInfo,
+};
 static const __DRIextension *swrast_loader_extensions[] = {
    &swrast_loader_extension.base,
    &image_lookup_extension.base,
+   &copper_loader_extension.base,
    NULL,
 };
 
@@ -2115,7 +2141,7 @@ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
                                                      0, EGL_DRI2_MAX_FORMATS))
       goto cleanup;
 
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup("zink");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 

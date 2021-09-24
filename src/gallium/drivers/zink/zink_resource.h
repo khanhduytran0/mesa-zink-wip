@@ -79,7 +79,21 @@ struct zink_resource_object {
    bool render_target;
    bool is_buffer;
 
+   /* TODO: this should be a union */
    struct zink_bo *bo;
+   // struct {
+   void *dt;
+   uint32_t dt_idx;
+   uint32_t last_dt_idx;
+   VkSemaphore acquire;
+   VkSemaphore present;
+   bool acquired;
+   bool new_dt;
+   bool indefinite_acquire;
+   struct util_queue_fence present_fence;
+   // }
+
+
    VkDeviceSize offset, size, alignment;
    VkImageCreateFlags vkflags;
    VkImageUsageFlags vkusage;
@@ -138,7 +152,6 @@ struct zink_resource {
    };
 
    bool dmabuf_acquire;
-   struct sw_displaytarget *dt;
    unsigned dt_stride;
 
    uint8_t modifiers_count;

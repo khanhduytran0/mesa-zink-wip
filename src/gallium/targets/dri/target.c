@@ -131,7 +131,7 @@ PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)
 {
    globalDriverAPI = &galliumvk_driver_api;
    // hmm
-   return galliumsw_driver_extensions;
+   return galliumvk_driver_extensions;
 }
 
 #endif

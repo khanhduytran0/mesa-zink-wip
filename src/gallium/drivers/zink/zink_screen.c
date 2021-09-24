@@ -22,7 +22,7 @@
  */
 
 #include "zink_screen.h"
-
+#include "zink_copper.h"
 #include "zink_compiler.h"
 #include "zink_context.h"
 #include "zink_device_info.h"
@@ -1295,37 +1295,32 @@ init_queue(struct zink_screen *screen)
 
 static void
 zink_flush_frontbuffer(struct pipe_screen *pscreen,
-                       struct pipe_context *pcontext,
+                       struct pipe_context *pctx,
                        struct pipe_resource *pres,
                        unsigned level, unsigned layer,
                        void *winsys_drawable_handle,
                        struct pipe_box *sub_box)
 {
-   *(int *)0 = 0;
-#if  0
    struct zink_screen *screen = zink_screen(pscreen);
-   struct sw_winsys *winsys = &screen.winsys.base;
    struct zink_resource *res = zink_resource(pres);
-
-   void *map = winsys->displaytarget_map(winsys, res->dt, 0);
-
-   if (map) {
-      struct pipe_transfer *transfer = NULL;
-      void *res_map = pipe_texture_map(pcontext, pres, level, layer, PIPE_MAP_READ, 0, 0,
-                                        u_minify(pres->width0, level),
-                                        u_minify(pres->height0, level),
-                                        &transfer);
-      if (res_map) {
-         util_copy_rect((ubyte*)map, pres->format, res->dt_stride, 0, 0,
-                        transfer->box.width, transfer->box.height,
-                        (const ubyte*)res_map, transfer->stride, 0, 0);
-         pipe_texture_unmap(pcontext, transfer);
+   struct zink_context *ctx = zink_context(pctx);
+   if (ctx->batch.swapchain) {
+      pctx->flush(pctx, NULL, 0);
+      if (ctx->last_fence && screen->threaded) {
+         struct zink_batch_state *bs = zink_batch_state(ctx->last_fence);
+         util_queue_fence_wait(&bs->flush_completed);
       }
-      winsys->displaytarget_unmap(winsys, res->dt);
    }
 
-   winsys->displaytarget_display(winsys, res->dt, winsys_drawable_handle, sub_box);
-#endif
+   if (res->obj->acquired)
+      zink_copper_present_queue(screen, res);
+   else {
+      assert(res->obj->last_dt_idx != UINT32_MAX);
+      if (!zink_copper_last_present_eq(res->obj->dt, res->obj->last_dt_idx)) {
+         zink_copper_acquire_readback(ctx, res);
+         zink_copper_present_readback(screen, res);
+      }
+   }
 }
 
 bool
@@ -1598,26 +1593,6 @@ setup_renderdoc(struct zink_screen *screen)
       screen->renderdoc_capture_end = screen->renderdoc_capture_start;
    }
 #endif
-}
-
-static void
-check_device_needs_mesa_wsi(struct zink_screen *screen)
-{
-   if (
-       /* turnip */
-       (screen->info.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
-        screen->info.props.vendorID == 0 &&
-        screen->info.props.deviceID == 0) ||
-       /* Raspberry Pi 4 V3DV driver */
-       (screen->info.props.vendorID == 0x14E4 &&
-        screen->info.props.deviceID == 42) ||
-       /* RADV */
-       screen->info.driver_props.driverID == VK_DRIVER_ID_MESA_RADV_KHR
-      ) {
-      screen->needs_mesa_wsi = true;
-   } else if (screen->info.driver_props.driverID == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR)
-      screen->needs_mesa_flush_wsi = true;
-
 }
 
 static void
@@ -2011,12 +1986,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config)
 
    setup_renderdoc(screen);
    if (screen->threaded)
-      util_queue_init(&screen->flush_queue, "zfq", 8, 1, UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL);
-
-   /* Some Vulkan implementations have special requirements for WSI
-    * allocations.
-    */
-   check_device_needs_mesa_wsi(screen);
+      util_queue_init(&screen->flush_queue, "zfq", 8, 1, UTIL_QUEUE_INIT_RESIZE_IF_FULL, screen);
 
    zink_internal_setup_moltenvk(screen);
 
@@ -2172,153 +2142,7 @@ fail:
    return NULL;
 }
 
-#include <xcb/xcb.h>
-#include <vulkan/vulkan_xcb.h>
-
-struct copper_displaytarget
-{
-   enum pipe_format format;
-   unsigned width;
-   unsigned height;
-   unsigned stride;
-   void *loader_private;
-
-   VkSurfaceKHR surface;
-   VkSwapchainKHR swapchain;
-
-   union {
-       VkBaseOutStructure bos;
-       VkXcbSurfaceCreateInfoKHR xcb;
-       // more
-   } sci;
-
-   VkSwapchainCreateInfoKHR scci;
-};
-
-struct copper_winsys
-{
-   // probably just embed this all in the pipe_screen
-   struct sw_winsys base;
-
-   const struct copper_loader_funcs *loader;
-};
-
-// not sure if cute or vile
-static struct zink_screen *
-copper_winsys_screen(struct sw_winsys *ws)
-{
-    return container_of(ws, struct zink_screen, winsys);
-}
-
-static VkSurfaceKHR
-copper_CreateSurface(struct zink_screen *screen, struct copper_displaytarget *cdt)
-{
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkResult error = VK_SUCCESS;
-
-    // loader_private is the dri drawable. the loader fills the whole
-    // thing in, and we use its sType to dispatch
-    error = screen->loader->SetSurfaceCreateInfo(cdt->loader_private,
-                                                 &cdt->sci.bos);
-    if (error != VK_SUCCESS)
-        return VK_NULL_HANDLE;
-
-    VkStructureType type = cdt->sci.bos.sType;
-    if (type == VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR)
-        error = vkCreateXcbSurfaceKHR(screen->instance, &cdt->sci.xcb, NULL,
-                                      &surface);
-    // else if, else if,
-
-    if (error != VK_SUCCESS)
-        return VK_NULL_HANDLE;
-
-    return surface;
-}
-
-static VkSwapchainKHR
-copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *cdt)
-{
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-    VkResult error = VK_SUCCESS;
-
-    /* static init */
-    if (cdt->swapchain == VK_NULL_HANDLE) {
-        cdt->scci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        cdt->scci.pNext = NULL;
-        cdt->scci.flags = 0;                   // probably not that interesting...
-        cdt->scci.minImageCount = 2;           // n-buffering
-        // XXX don't hardcode these next two, obv
-        cdt->scci.imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-        cdt->scci.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-        cdt->scci.imageArrayLayers = 1;        // XXX stereo
-        cdt->scci.imageUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                               VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                               VK_IMAGE_USAGE_SAMPLED_BIT |
-                               VK_IMAGE_USAGE_STORAGE_BIT |
-                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                               VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-        cdt->scci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;        // XXX no idea
-        cdt->scci.queueFamilyIndexCount = 0;
-        cdt->scci.pQueueFamilyIndices = NULL;
-        cdt->scci.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        cdt->scci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;  // XXX handle 
-        cdt->scci.presentMode = VK_PRESENT_MODE_FIFO_KHR;              // XXX swapint
-        cdt->scci.clipped = VK_TRUE;                                   // XXX hmm
-    }
-
-    cdt->scci.surface = cdt->surface;
-    cdt->scci.imageExtent.width = cdt->width;
-    cdt->scci.imageExtent.height = cdt->height;
-    cdt->scci.oldSwapchain = cdt->swapchain;
-
-    error = vkCreateSwapchainKHR(screen->dev, &cdt->scci, NULL,
-                                 &swapchain);
-    if (error != VK_SUCCESS) {
-        // do something
-    }
-
-    return swapchain;
-}
-
-static struct sw_displaytarget *
-copper_displaytarget_create(struct sw_winsys *ws, unsigned tex_usage,
-                            enum pipe_format format, unsigned width,
-                            unsigned height, unsigned alignment,
-                            const void *loader_private, unsigned *stride)
-{
-   struct zink_screen *screen = copper_winsys_screen(ws);
-   struct copper_displaytarget *cdt;
-   unsigned nblocksy, size, format_stride;
-
-   cdt = CALLOC_STRUCT(copper_displaytarget);
-   if (!cdt)
-      return NULL;
-
-   cdt->format = format;
-   cdt->width = width;
-   cdt->height = height;
-   cdt->loader_private = loader_private;
-
-#if 0
-   cdt->surface = copper_CreateSurface(screen, cdt);
-   if (!cdt->surface)
-      goto out;
-
-#endif
-
-
-   cdt->swapchain = copper_CreateSwapchain(screen, cdt);
-   if (!cdt->swapchain)
-      goto out;
-
-   // copper_GetSwapchainImages(ws, cdt);
-
-   *stride = cdt->stride;
-   return (struct sw_displaytarget *)cdt;
-
-out:
-   return NULL;
-}
+extern struct sw_winsys zink_copper;
 
 struct pipe_screen *
 zink_create_screen(struct sw_winsys *winsys)
@@ -2326,15 +2150,7 @@ zink_create_screen(struct sw_winsys *winsys)
    struct zink_screen *ret = zink_internal_create_screen(NULL);
    if (ret) {
       ret->drm_fd = -1;
-      ret->winsys.destroy = NULL;
-      ret->winsys.is_displaytarget_format_supported = NULL;
-      ret->winsys.displaytarget_create = copper_displaytarget_create;
-      ret->winsys.displaytarget_from_handle = NULL;
-      ret->winsys.displaytarget_get_handle = NULL;
-      ret->winsys.displaytarget_map = NULL;
-      ret->winsys.displaytarget_unmap = NULL;
-      ret->winsys.displaytarget_display = NULL;
-      ret->winsys.displaytarget_destroy = NULL;
+      ret->winsys = zink_copper;
       ret->sw_winsys = winsys;
    }
 
@@ -2355,12 +2171,6 @@ zink_drm_create_screen(int fd, const struct pipe_screen_config *config)
    }
 
    return &ret->base;
-}
-
-VkInstance
-zink_screen_get_instance(struct pipe_screen *screen)
-{
-    return zink_screen(screen)->instance;
 }
 
 void zink_stub_function_not_loaded()
