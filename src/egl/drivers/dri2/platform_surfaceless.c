@@ -199,6 +199,31 @@ surfaceless_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
    }
 }
 
+// i don't belong here
+
+#include "copper_interface.h"
+#include <vulkan/vulkan.h>
+
+// hmm, mesa doesn't have this yet. it's not _strictly_ needed, you could fake it with
+// plain anonymous images... hm.
+static void
+copperSetSurfaceCreateInfo(void *_draw, VkBaseOutStructure *out)
+{
+    struct dri2_egl_surface *dri2_surf = _draw;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+    VkHeadlessSurfaceCreateInfoEXT *hsci = (VkHeadlessSurfaceCreateInfoEXT *)out;
+
+    hsci->sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT;
+    hsci->pNext = NULL;
+    hsci->flags = 0;
+}
+
+static const __DRIcopperLoaderExtension copper_loader_extension = {
+    .base = { __DRI_COPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = copperSetSurfaceCreateInfo,
+};
+
 static const __DRIimageLoaderExtension image_loader_extension = {
    .base             = { __DRI_IMAGE_LOADER, 2 },
    .getBuffers       = surfaceless_image_get_buffers,
@@ -211,6 +236,7 @@ static const __DRIextension *image_loader_extensions[] = {
    &image_lookup_extension.base,
    &use_invalidate.base,
    &background_callable_extension.base,
+   &copper_loader_extension.base,
    NULL,
 };
 
@@ -219,6 +245,7 @@ static const __DRIextension *swrast_loader_extensions[] = {
    &image_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   &copper_loader_extension.base,
    NULL,
 };
 
@@ -299,7 +326,7 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
    disp->Device = _eglAddDevice(dri2_dpy->fd, true);
    assert(disp->Device);
 
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup("zink");
    if (!dri2_dpy->driver_name)
       return false;
 
