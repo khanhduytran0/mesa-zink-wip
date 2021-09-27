@@ -1200,9 +1200,36 @@ static const __DRIswrastLoaderExtension swrast_loader_extension = {
    .getImage        = swrastGetImage,
 };
 
+// i don't belong here
+
+#include "copper_interface.h"
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_xcb.h>
+
+static void
+copperSetSurfaceCreateInfo(void *_draw, VkBaseOutStructure *out)
+{
+    struct dri2_egl_surface *dri2_surf = _draw;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(dri2_surf->base.Resource.Display);
+    VkXcbSurfaceCreateInfoKHR *xsci = (VkXcbSurfaceCreateInfoKHR *)out;
+
+    xsci->sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
+    xsci->pNext = NULL;
+    xsci->flags = 0;
+    xsci->connection = dri2_dpy->conn;
+    xsci->window = dri2_surf->drawable;
+}
+
+static const __DRIcopperLoaderExtension copper_loader_extension = {
+    .base = { __DRI_COPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = copperSetSurfaceCreateInfo,
+};
+
 static const __DRIextension *swrast_loader_extensions[] = {
    &swrast_loader_extension.base,
    &image_lookup_extension.base,
+   &copper_loader_extension.base,
    NULL,
 };
 
@@ -1292,7 +1319,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
     * Every hardware driver_name is set using strdup. Doing the same in
     * here will allow is to simply free the memory at dri2_terminate().
     */
-   dri2_dpy->driver_name = strdup("swrast");
+   dri2_dpy->driver_name = strdup("zink");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 
