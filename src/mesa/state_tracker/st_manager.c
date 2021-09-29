@@ -246,7 +246,9 @@ st_framebuffer_validate(struct st_framebuffer *stfb,
 
       strb = st_renderbuffer(stfb->Base.Attachment[idx].Renderbuffer);
       assert(strb);
-      if (strb->texture == textures[i]) {
+      if (strb->texture == textures[i] &&
+          strb->Base.Width == textures[i]->width0 &&
+          strb->Base.Height == textures[i]->height0) {
          pipe_resource_reference(&textures[i], NULL);
          continue;
       }
