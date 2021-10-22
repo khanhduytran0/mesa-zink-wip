@@ -148,19 +148,24 @@ nir_lower_uniforms_to_ubo(nir_shader *shader, bool dword_packed, bool load_vec4)
       if (shader->num_uniforms > 0) {
          const struct glsl_type *type = glsl_array_type(glsl_vec4_type(),
                                                         shader->num_uniforms, 16);
-         nir_variable *ubo = nir_variable_create(shader, nir_var_mem_ubo, type,
-                                                 "uniform_0");
-         ubo->data.binding = 0;
-         ubo->data.explicit_binding = 1;
-
          struct glsl_struct_field field = {
             .type = type,
             .name = "data",
             .location = -1,
          };
-         ubo->interface_type =
-               glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
-                                   false, "__ubo0_interface");
+         const struct glsl_type *interface_type =          
+            glsl_interface_type(&field, 1, GLSL_INTERFACE_PACKING_STD430,
+                                false, "__ubo0_interface");
+         nir_variable *ubo = nir_find_variable_with_driver_location(shader, nir_var_mem_ubo, 0);
+         if (ubo) {
+            ubo->type = type;
+         } else {
+            ubo = nir_variable_create(shader, nir_var_mem_ubo, type,
+                                      "uniform_0");
+            ubo->data.binding = 0;
+            ubo->data.explicit_binding = 1;
+         }
+         ubo->interface_type = interface_type;
       }
    }
 
