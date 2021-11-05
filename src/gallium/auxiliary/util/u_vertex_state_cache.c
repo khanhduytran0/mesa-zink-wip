@@ -109,6 +109,7 @@ util_vertex_state_cache_get(struct pipe_screen *screen,
                          full_velem_mask);
    if (state) {
       assert(key_hash(state) == hash);
+      state->hash = hash;
       _mesa_set_add_pre_hashed(cache->set, hash, state);
    }
 

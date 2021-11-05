@@ -730,6 +730,7 @@ struct pipe_vertex_element
  */
 struct pipe_vertex_state {
    struct pipe_reference reference;
+   uint32_t hash;
    struct pipe_screen *screen;
 
    /* The following structure is used as a key for util_vertex_state_cache
