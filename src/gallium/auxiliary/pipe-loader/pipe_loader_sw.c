@@ -43,7 +43,7 @@
 #include "frontend/drisw_api.h"
 #include "frontend/sw_driver.h"
 #include "frontend/sw_winsys.h"
-
+#include "util/driconf.h"
 
 struct pipe_loader_sw_device {
    struct pipe_loader_device base;
@@ -58,6 +58,7 @@ struct pipe_loader_sw_device {
 #define pipe_loader_sw_device(dev) ((struct pipe_loader_sw_device *)dev)
 
 static const struct pipe_loader_ops pipe_loader_sw_ops;
+static const struct pipe_loader_ops pipe_loader_vk_ops;
 
 #ifdef GALLIUM_STATIC_TARGETS
 static const struct sw_driver_descriptor driver_descriptors = {
@@ -124,6 +125,40 @@ pipe_loader_sw_probe_init_common(struct pipe_loader_sw_device *sdev)
    return true;
 }
 
+static bool
+pipe_loader_vk_probe_init_common(struct pipe_loader_sw_device *sdev)
+{
+   sdev->base.type = PIPE_LOADER_DEVICE_PLATFORM;
+   sdev->base.driver_name = "copper";
+   sdev->base.ops = &pipe_loader_vk_ops;
+   sdev->fd = -1;
+
+#ifdef GALLIUM_STATIC_TARGETS
+   sdev->dd = &driver_descriptors;
+   if (!sdev->dd)
+      return false;
+#else
+   const char *search_dir = getenv("GALLIUM_PIPE_SEARCH_DIR");
+   if (search_dir == NULL)
+      search_dir = PIPE_SEARCH_DIR;
+
+   sdev->lib = pipe_loader_find_module("swrast", search_dir);
+   if (!sdev->lib)
+      return false;
+
+   sdev->dd = (const struct sw_driver_descriptor *)
+      util_dl_get_proc_address(sdev->lib, "swrast_driver_descriptor");
+
+   if (!sdev->dd){
+      util_dl_close(sdev->lib);
+      sdev->lib = NULL;
+      return false;
+   }
+#endif
+
+   return true;
+}
+
 static void
 pipe_loader_sw_probe_teardown_common(struct pipe_loader_sw_device *sdev)
 {
@@ -144,6 +179,35 @@ pipe_loader_sw_probe_dri(struct pipe_loader_device **devs, const struct drisw_lo
       return false;
 
    if (!pipe_loader_sw_probe_init_common(sdev))
+      goto fail;
+
+   for (i = 0; sdev->dd->winsys[i].name; i++) {
+      if (strcmp(sdev->dd->winsys[i].name, "dri") == 0) {
+         sdev->ws = sdev->dd->winsys[i].create_winsys(drisw_lf);
+         break;
+      }
+   }
+   if (!sdev->ws)
+      goto fail;
+
+   *devs = &sdev->base;
+   return true;
+
+fail:
+   pipe_loader_sw_probe_teardown_common(sdev);
+   FREE(sdev);
+   return false;
+}
+bool
+pipe_loader_vk_probe_dri(struct pipe_loader_device **devs, const struct drisw_loader_funcs *drisw_lf)
+{
+   struct pipe_loader_sw_device *sdev = CALLOC_STRUCT(pipe_loader_sw_device);
+   int i;
+
+   if (!sdev)
+      return false;
+
+   if (!pipe_loader_vk_probe_init_common(sdev))
       goto fail;
 
    for (i = 0; sdev->dd->winsys[i].name; i++) {
@@ -303,6 +367,17 @@ pipe_loader_sw_get_driconf(struct pipe_loader_device *dev, unsigned *count)
    return NULL;
 }
 
+static const driOptionDescription zink_driconf[] = {
+      #include "zink/driinfo_zink.h"
+};
+
+static const struct driOptionDescription *
+pipe_loader_vk_get_driconf(struct pipe_loader_device *dev, unsigned *count)
+{
+   *count = ARRAY_SIZE(zink_driconf);
+   return zink_driconf;
+}
+
 static struct pipe_screen *
 pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
                              const struct pipe_screen_config *config, bool sw_vk)
@@ -320,5 +395,11 @@ pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
 static const struct pipe_loader_ops pipe_loader_sw_ops = {
    .create_screen = pipe_loader_sw_create_screen,
    .get_driconf = pipe_loader_sw_get_driconf,
+   .release = pipe_loader_sw_release
+};
+
+static const struct pipe_loader_ops pipe_loader_vk_ops = {
+   .create_screen = pipe_loader_sw_create_screen,
+   .get_driconf = pipe_loader_vk_get_driconf,
    .release = pipe_loader_sw_release
 };

@@ -117,7 +117,7 @@ copper_init_screen(__DRIscreen * sPriv)
    if (screen->fd != -1)
       success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd);
    else
-      success = pipe_loader_sw_probe_dri(&screen->dev, NULL);
+      success = pipe_loader_vk_probe_dri(&screen->dev, NULL);
    if (success) {
       pscreen = pipe_loader_create_screen(screen->dev);
       dri_init_options(screen);
