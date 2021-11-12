@@ -18,6 +18,11 @@ const __DRIextension **__driDriverGetExtensions_swrast(void);
 PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
 {
    globalDriverAPI = &galliumsw_driver_api;
+#if defined(GALLIUM_ZINK) && !defined(__APPLE__)
+   vkDriverAPI = &galliumvk_driver_api;
+#else
+   vkDriverAPI = &galliumsw_driver_api;
+#endif
    return galliumsw_driver_extensions;
 }
 
@@ -130,7 +135,7 @@ const __DRIextension **__driDriverGetExtensions_zink(void);
 PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)
 {
    globalDriverAPI = &galliumvk_driver_api;
-   // hmm
+   vkDriverAPI = &galliumvk_driver_api;
    return galliumvk_driver_extensions;
 }
 

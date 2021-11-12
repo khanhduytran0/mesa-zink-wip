@@ -99,7 +99,6 @@ static const __DRIconfig **
 copper_init_screen(__DRIscreen * sPriv)
 {
    const __DRIcopperLoaderExtension *loader = sPriv->copper_loader;
-   assert(loader);
    const __DRIconfig **configs;
    struct dri_screen *screen;
    struct pipe_screen *pscreen = NULL;
@@ -110,6 +109,7 @@ copper_init_screen(__DRIscreen * sPriv)
 
    screen->sPriv = sPriv;
    screen->fd = sPriv->fd;
+   screen->can_share_buffer = true;
 
    sPriv->driverPrivate = (void *)screen;
 

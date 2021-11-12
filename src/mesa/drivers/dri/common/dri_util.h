@@ -160,6 +160,7 @@ struct __DriverAPIRec {
 
 extern const struct __DriverAPIRec driDriverAPI;
 extern const struct __DriverAPIRec *globalDriverAPI;
+extern const struct __DriverAPIRec *vkDriverAPI;
 
 /**
  * Per-screen private driver information.
