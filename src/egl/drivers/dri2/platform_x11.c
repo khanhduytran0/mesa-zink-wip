@@ -1301,6 +1301,28 @@ disconnect:
    return _eglError(EGL_BAD_ALLOC, msg);
 }
 
+static void
+dri2_x11_setup_swap_interval(_EGLDisplay *disp)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   int arbitrary_max_interval = 1000;
+
+   /* default behavior for no SwapBuffers support: no vblank syncing
+    * either.
+    */
+   dri2_dpy->min_swap_interval = 0;
+   dri2_dpy->max_swap_interval = 0;
+   dri2_dpy->default_swap_interval = 0;
+
+   if (!dri2_dpy->swap_available)
+      return;
+
+   /* If we do have swapbuffers, then we can support pretty much any swap
+    * interval.
+    */
+   dri2_setup_swap_interval(disp, arbitrary_max_interval);
+}
+
 static EGLBoolean
 dri2_initialize_x11_swrast(_EGLDisplay *disp)
 {
@@ -1327,7 +1349,7 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
     * Every hardware driver_name is set using strdup. Doing the same in
     * here will allow is to simply free the memory at dri2_terminate().
     */
-   dri2_dpy->driver_name = strdup("zink");
+   dri2_dpy->driver_name = strdup(disp->Options.Zink ? "zink" : "swrast");
    if (!dri2_load_driver_swrast(disp))
       goto cleanup;
 
@@ -1340,6 +1362,19 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
       goto cleanup;
 
    dri2_setup_screen(disp);
+
+   if (disp->Options.Zink) {
+      dri2_dpy->device_name = strdup("zink");
+      dri2_x11_setup_swap_interval(disp);
+      if (!dri2_dpy->is_different_gpu)
+         disp->Extensions.KHR_image_pixmap = EGL_TRUE;
+      disp->Extensions.NOK_texture_from_pixmap = EGL_TRUE;
+      disp->Extensions.CHROMIUM_sync_control = EGL_TRUE;
+      disp->Extensions.EXT_buffer_age = EGL_TRUE;
+      disp->Extensions.EXT_swap_buffers_with_damage = EGL_TRUE;
+
+      //dri2_set_WL_bind_wayland_display(disp);
+   }
 
    if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true))
       goto cleanup;
@@ -1354,28 +1389,6 @@ dri2_initialize_x11_swrast(_EGLDisplay *disp)
  cleanup:
    dri2_display_destroy(disp);
    return EGL_FALSE;
-}
-
-static void
-dri2_x11_setup_swap_interval(_EGLDisplay *disp)
-{
-   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
-   int arbitrary_max_interval = 1000;
-
-   /* default behavior for no SwapBuffers support: no vblank syncing
-    * either.
-    */
-   dri2_dpy->min_swap_interval = 0;
-   dri2_dpy->max_swap_interval = 0;
-   dri2_dpy->default_swap_interval = 0;
-
-   if (!dri2_dpy->swap_available)
-      return;
-
-   /* If we do have swapbuffers, then we can support pretty much any swap
-    * interval.
-    */
-   dri2_setup_swap_interval(disp, arbitrary_max_interval);
 }
 
 #ifdef HAVE_DRI3
