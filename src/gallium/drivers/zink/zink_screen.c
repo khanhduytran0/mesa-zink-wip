@@ -2145,9 +2145,9 @@ fail:
 extern struct sw_winsys zink_copper;
 
 struct pipe_screen *
-zink_create_screen(struct sw_winsys *winsys)
+zink_create_screen(struct sw_winsys *winsys, const struct pipe_screen_config *config)
 {
-   struct zink_screen *ret = zink_internal_create_screen(NULL);
+   struct zink_screen *ret = zink_internal_create_screen(config);
    if (ret) {
       ret->drm_fd = -1;
       ret->winsys = zink_copper;

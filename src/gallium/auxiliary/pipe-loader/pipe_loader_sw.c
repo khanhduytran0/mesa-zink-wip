@@ -310,7 +310,7 @@ pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
    struct pipe_loader_sw_device *sdev = pipe_loader_sw_device(dev);
    struct pipe_screen *screen;
 
-   screen = sdev->dd->create_screen(sdev->ws, sw_vk);
+   screen = sdev->dd->create_screen(sdev->ws, config, sw_vk);
    if (!screen)
       sdev->ws->destroy(sdev->ws);
 
