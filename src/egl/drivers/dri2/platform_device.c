@@ -41,6 +41,7 @@
 
 #include "egl_dri2.h"
 #include "loader.h"
+#include "copper_interface.h"
 #include "util/debug.h"
 
 static __DRIimage*
@@ -212,10 +213,17 @@ static const __DRIimageLoaderExtension image_loader_extension = {
    .getCapability    = device_get_capability,
 };
 
+static const __DRIcopperLoaderExtension copper_loader_extension = {
+    .base = { __DRI_COPPER_LOADER, 1 },
+
+    .SetSurfaceCreateInfo   = NULL,
+};
+
 static const __DRIextension *image_loader_extensions[] = {
    &image_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   &copper_loader_extension.base,
    NULL,
 };
 
