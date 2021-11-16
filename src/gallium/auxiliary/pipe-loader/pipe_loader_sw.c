@@ -392,6 +392,23 @@ pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
    return screen ? debug_screen_wrap(screen) : NULL;
 }
 
+extern struct pipe_screen *
+zink_create_screen(struct sw_winsys *winsys, const struct pipe_screen_config *config);
+
+static struct pipe_screen *
+pipe_loader_vk_create_screen(struct pipe_loader_device *dev,
+                             const struct pipe_screen_config *config, bool sw_vk)
+{
+   struct pipe_loader_sw_device *sdev = pipe_loader_sw_device(dev);
+   struct pipe_screen *screen = NULL;
+
+   screen = zink_create_screen(sdev->ws, config);
+   if (!screen)
+      sdev->ws->destroy(sdev->ws);
+
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
 static const struct pipe_loader_ops pipe_loader_sw_ops = {
    .create_screen = pipe_loader_sw_create_screen,
    .get_driconf = pipe_loader_sw_get_driconf,
@@ -399,7 +416,7 @@ static const struct pipe_loader_ops pipe_loader_sw_ops = {
 };
 
 static const struct pipe_loader_ops pipe_loader_vk_ops = {
-   .create_screen = pipe_loader_sw_create_screen,
+   .create_screen = pipe_loader_vk_create_screen,
    .get_driconf = pipe_loader_vk_get_driconf,
    .release = pipe_loader_sw_release
 };
