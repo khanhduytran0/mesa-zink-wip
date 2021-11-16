@@ -27,6 +27,7 @@
 #include "zink_screen.h"
 #include "zink_resource.h"
 #include "zink_copper.h"
+#include "vk_enum_to_str.h"
 
 struct copper_winsys
 {
@@ -163,7 +164,7 @@ copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *
    error = VKSCR(CreateSwapchainKHR)(screen->dev, &cswap->scci, NULL,
                                 &cswap->swapchain);
    if (error != VK_SUCCESS) {
-       // do something
+       mesa_loge("CreateSwapchainKHR failed with %s\n", vk_Result_to_str(error));
        free(cswap);
        return NULL;
    }
