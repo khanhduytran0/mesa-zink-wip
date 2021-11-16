@@ -102,6 +102,42 @@ destroy_swapchain(struct zink_screen *screen, struct copper_swapchain *cswap)
    free(cswap);
 }
 
+static struct hash_entry *
+find_dt_entry(struct zink_screen *screen, const struct copper_displaytarget *cdt)
+{
+   struct hash_entry *he = NULL;
+   switch (cdt->type) {
+   case COPPER_X11:
+      he = _mesa_hash_table_search_pre_hashed(&screen->dts, cdt->info.xcb.window, (void*)(uintptr_t)cdt->info.xcb.window);
+      break;
+   case COPPER_WAYLAND:
+      he = _mesa_hash_table_search(&screen->dts, cdt->info.wl.surface);
+      break;
+   default:
+      unreachable("unsupported!");
+   }
+   assert(he);
+   return he;
+}
+
+void
+zink_copper_deinit_displaytarget(struct zink_screen *screen, struct copper_displaytarget *cdt)
+{
+   if (!cdt->surface)
+      return;
+   simple_mtx_lock(&screen->dt_lock);
+   struct hash_entry *he = find_dt_entry(screen, cdt);
+   /* this deinits the registered entry, which should always be the "right" entry */
+   cdt = he->data;
+   _mesa_hash_table_remove(&screen->dts, he);
+   simple_mtx_unlock(&screen->dt_lock);
+   destroy_swapchain(screen, cdt->swapchain);
+   destroy_swapchain(screen, cdt->old_swapchain);
+   VKSCR(DestroySurfaceKHR)(screen->instance, cdt->surface, NULL);
+   cdt->swapchain = cdt->old_swapchain = NULL;
+   cdt->surface = VK_NULL_HANDLE;
+}
+
 static struct copper_swapchain *
 copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *cdt, unsigned w, unsigned h)
 {
@@ -111,6 +147,7 @@ copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *
       return NULL;
    cswap->last_present_prune = 1;
 
+   bool has_alpha = cdt->info.has_alpha && (cdt->caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR);
    if (cdt->swapchain) {
       cswap->scci = cdt->swapchain->scci;
       cswap->scci.oldSwapchain = cdt->swapchain->swapchain;
@@ -128,7 +165,7 @@ copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *
       cswap->scci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       cswap->scci.queueFamilyIndexCount = 0;
       cswap->scci.pQueueFamilyIndices = NULL;
-      cswap->scci.compositeAlpha = cdt->info.has_alpha ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+      cswap->scci.compositeAlpha = has_alpha ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
       cswap->scci.presentMode = cdt->type == COPPER_X11 ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR; // XXX swapint
       cswap->scci.clipped = VK_TRUE;                                   // XXX hmm
    }
@@ -163,6 +200,15 @@ copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *
 
    error = VKSCR(CreateSwapchainKHR)(screen->dev, &cswap->scci, NULL,
                                 &cswap->swapchain);
+   if (error == VK_ERROR_NATIVE_WINDOW_IN_USE_KHR) {
+      if (util_queue_is_initialized(&screen->flush_queue))
+         util_queue_finish(&screen->flush_queue);
+      if (VKSCR(QueueWaitIdle)(screen->queue) != VK_SUCCESS)
+         debug_printf("vkQueueWaitIdle failed\n");
+      zink_copper_deinit_displaytarget(screen, cdt);
+      error = VKSCR(CreateSwapchainKHR)(screen->dev, &cswap->scci, NULL,
+                                   &cswap->swapchain);
+   }
    if (error != VK_SUCCESS) {
        mesa_loge("CreateSwapchainKHR failed with %s\n", vk_Result_to_str(error));
        free(cswap);
@@ -252,6 +298,23 @@ copper_displaytarget_create(struct sw_winsys *ws, unsigned tex_usage,
    if (!update_swapchain(screen, cdt, width, height))
       goto out;
 
+   simple_mtx_lock(&screen->dt_lock);
+   switch (cdt->type) {
+   case COPPER_X11:
+      if (unlikely(!screen->dts.table))
+         _mesa_hash_table_init(&screen->dts, screen, NULL, _mesa_key_pointer_equal);
+      _mesa_hash_table_insert_pre_hashed(&screen->dts, cdt->info.xcb.window, (void*)(uintptr_t)cdt->info.xcb.window, cdt);
+      break;
+   case COPPER_WAYLAND:
+      if (unlikely(!screen->dts.table))
+         _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
+      _mesa_hash_table_insert(&screen->dts, cdt->info.wl.surface, cdt);
+      break;
+   default:
+      unreachable("unsupported!");
+   }
+   simple_mtx_unlock(&screen->dt_lock);
+
    *stride = cdt->stride;
    return (struct sw_displaytarget *)cdt;
 
@@ -267,9 +330,7 @@ copper_displaytarget_destroy(struct sw_winsys *ws, struct sw_displaytarget *dt)
    struct copper_displaytarget *cdt = copper_displaytarget(dt);
    if (!p_atomic_dec_zero(&cdt->refcount))
       return;
-   destroy_swapchain(screen, cdt->swapchain);
-   destroy_swapchain(screen, cdt->old_swapchain);
-   VKSCR(DestroySurfaceKHR)(screen->instance, cdt->surface, NULL);
+   zink_copper_deinit_displaytarget(screen, cdt);
    FREE(dt);
 }
 

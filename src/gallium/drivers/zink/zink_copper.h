@@ -107,5 +107,6 @@ void
 zink_copper_acquire_readback(struct zink_context *ctx, struct zink_resource *res);
 bool
 zink_copper_present_readback(struct zink_screen *screen, struct zink_resource *res);
-
+void
+zink_copper_deinit_displaytarget(struct zink_screen *screen, struct copper_displaytarget *cdt);
 #endif

@@ -93,6 +93,9 @@ struct zink_screen {
 
    unsigned buffer_rebind_counter;
 
+   struct hash_table dts;
+   simple_mtx_t dt_lock;
+
    bool device_lost;
    int drm_fd;
    struct sw_winsys winsys;
