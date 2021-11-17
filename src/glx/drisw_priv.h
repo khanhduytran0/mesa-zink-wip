@@ -31,6 +31,7 @@
 struct drisw_display
 {
    __GLXDRIdisplay base;
+   bool zink;
 };
 
 struct drisw_context

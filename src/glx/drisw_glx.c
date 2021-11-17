@@ -401,6 +401,17 @@ static const __DRIextension *loader_extensions_noshm[] = {
    NULL
 };
 
+extern const __DRIuseInvalidateExtension dri2UseInvalidate;
+extern const __DRIbackgroundCallableExtension driBackgroundCallable;
+
+static const __DRIextension *copper_extensions_noshm[] = {
+   &swrastLoaderExtension.base,
+   &copperLoaderExtension.base,
+   &dri2UseInvalidate.base,
+   &driBackgroundCallable.base,
+   NULL
+};
+
 /**
  * GLXDRI functions
  */
@@ -846,6 +857,7 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
    struct glx_config *configs = NULL, *visuals = NULL;
    int i;
    const __DRIextension **loader_extensions_local;
+   const struct drisw_display *pdpyp = (struct drisw_display *)priv->driswDisplay;
 
    psc = calloc(1, sizeof *psc);
    if (psc == NULL)
@@ -861,10 +873,14 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
       goto handle_error;
    psc->name = driver;
 
-   if (!check_xshm(psc->base.dpy))
-      loader_extensions_local = loader_extensions_noshm;
-   else
-      loader_extensions_local = loader_extensions_shm;
+   if (pdpyp->zink) {
+      loader_extensions_local = copper_extensions_noshm;
+   } else {
+      if (!check_xshm(psc->base.dpy))
+         loader_extensions_local = loader_extensions_noshm;
+      else
+         loader_extensions_local = loader_extensions_shm;
+   }
 
    for (i = 0; extensions[i]; i++) {
       if (strcmp(extensions[i]->name, __DRI_CORE) == 0)
@@ -950,18 +966,10 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
 static struct glx_screen *
 driswCreateScreen(int screen, struct glx_display *priv)
 {
-#if 1
-   if (!env_var_as_boolean("LIBGL_COPPER_DISABLE", false)) {
-      struct glx_screen *zink = NULL;
-      void *libvulkan = dlopen("libvulkan.so.1", RTLD_LAZY);
-
-      if (libvulkan)
-         zink = driswCreateScreenDriver(screen, priv, "zink");
-
-      if (zink)
-         return zink;
+   const struct drisw_display *pdpyp = (struct drisw_display *)priv->driswDisplay;
+   if (pdpyp->zink && !env_var_as_boolean("LIBGL_COPPER_DISABLE", false)) {
+      return driswCreateScreenDriver(screen, priv, "zink");
    }
-#endif
 
     return driswCreateScreenDriver(screen, priv, "swrast");
 }
@@ -980,7 +988,7 @@ driswDestroyDisplay(__GLXDRIdisplay * dpy)
  * display pointer.
  */
 _X_HIDDEN __GLXDRIdisplay *
-driswCreateDisplay(Display * dpy)
+driswCreateDisplay(Display * dpy, bool zink)
 {
    struct drisw_display *pdpyp;
 
@@ -990,6 +998,7 @@ driswCreateDisplay(Display * dpy)
 
    pdpyp->base.destroyDisplay = driswDestroyDisplay;
    pdpyp->base.createScreen = driswCreateScreen;
+   pdpyp->zink = zink;
 
    return &pdpyp->base;
 }
