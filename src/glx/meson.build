@@ -73,6 +73,10 @@ files_libglx = files(
   'xfont.c',
 )
 
+if with_platform_android or host_machine.system() == 'darwin'
+dep_xdamage = null_dep
+endif
+
 extra_libs_libglx = []
 extra_deps_libgl = []
 extra_ld_args_libgl = []
@@ -124,7 +128,7 @@ endif
 
 libglx = static_library(
   'glx',
-  [files_libglx, glx_generated],
+  not with_platform_android and host_machine.system() != 'darwin' ? [files_libglx, glx_generated] : files('empty.c'),
   include_directories : [inc_include, inc_src, inc_mapi, inc_mesa, inc_gallium, inc_gallium_aux, inc_glapi, inc_loader],
   c_args : [
     '-DGL_LIB_NAME="lib@0@.so.@1@"'.format(gl_lib_name, gl_lib_version.split('.')[0]),
