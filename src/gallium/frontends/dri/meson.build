@@ -64,7 +64,7 @@ endif
 
 libdri = static_library(
   'dri',
-  files_libdri,
+  with_platform_android ? [] : files_libdri,
   include_directories : [
     inc_include, inc_util, inc_mesa, inc_mapi, inc_src, inc_gallium,
     inc_gallium_aux, inc_dri_common, inc_gallium_drivers,
