@@ -3,12 +3,15 @@
 
 #include "dri_screen.h"
 
+//   globalDriverAPI = &galliumdrm_driver_api;                              \
+//   return galliumdrm_driver_extensions;                                   \
+
 #define DEFINE_LOADER_DRM_ENTRYPOINT(drivername)                          \
 const __DRIextension **__driDriverGetExtensions_##drivername(void);       \
 PUBLIC const __DRIextension **__driDriverGetExtensions_##drivername(void) \
 {                                                                         \
-   globalDriverAPI = &galliumdrm_driver_api;                              \
-   return galliumdrm_driver_extensions;                                   \
+   printf("STUB: __driDriverGetExtensions_%s\n", #drivername);                     \
+   return NULL;                                                           \
 }
 
 #if defined(GALLIUM_SOFTPIPE)
@@ -18,7 +21,8 @@ const __DRIextension **__driDriverGetExtensions_swrast(void);
 PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
 {
    globalDriverAPI = &galliumsw_driver_api;
-#if defined(GALLIUM_ZINK) && !defined(__APPLE__)
+#if defined(GALLIUM_ZINK)
+// && !defined(__APPLE__)
    vkDriverAPI = &galliumvk_driver_api;
 #else
    vkDriverAPI = &galliumsw_driver_api;
@@ -129,7 +133,8 @@ DEFINE_LOADER_DRM_ENTRYPOINT(sun4i_drm)
 DEFINE_LOADER_DRM_ENTRYPOINT(lima)
 #endif
 
-#if defined(GALLIUM_ZINK) && !defined(__APPLE__)
+#if defined(GALLIUM_ZINK)
+// && !defined(__APPLE__)
 const __DRIextension **__driDriverGetExtensions_zink(void);
 
 PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)

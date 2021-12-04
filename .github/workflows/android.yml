@@ -1,0 +1,65 @@
+
+name: Build for Android
+
+on:
+  [push, pull_request]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    strategy:
+      matrix:
+        arch: [ "arm32", "aarch64", "x86_64" ]
+      fail-fast: false
+
+    name: "Build for ${{matrix.arch}}"
+
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build
+        run: |
+          ln -s vulkan_android.pc vulkan.pc
+          sudo apt update
+          sudo apt install -y meson libxrandr-dev libxxf86vm-dev libxshmfence-dev libxcb-*-dev libx11-xcb-dev libxfixes-dev libdrm-dev libx11-dev
+          cp -R /usr/include/X11 include/
+          cp -R /usr/include/xcb include/
+          cp -R /usr/include/GL/* include/GL/
+          pip3 install mako
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk-bundle"
+          # -Dglx=gallium-xlib \
+          meson "build-android-${{matrix.arch}}" \
+            --prefix=/tmp/zink \
+            --cross-file "android-${{matrix.arch}}" \
+            --buildtype debug \
+            -Dplatforms=android \
+            -Dplatform-sdk-version=24 \
+            -Dandroid-stub=true \
+            -Dllvm=disabled \
+            -Dxlib-lease=disabled \
+            -Degl=disabled \
+            -Dgbm=disabled \
+            -Dglx=dri \
+            -Dglx-direct=true \
+            -Dopengl=true \
+            -Dosmesa=true \
+            -Dvulkan-drivers= \
+            -Dgallium-drivers=zink \
+            -Dshared-glapi=false
+          ninja -C "build-android-${{matrix.arch}}" install
+          cp "build-android-${{matrix.arch}}/src/gallium/drivers/zink/libzink.a" /tmp/zink/lib/
+          rm /tmp/zink/lib/libOSMesa.so /tmp/zink/lib/libOSMesa.so.8
+          mv /tmp/zink/lib/libOSMesa.so.8.0.0 /tmp/zink/lib/libOSMesa.so.8
+          cp /tmp/zink/lib/libOSMesa.so.8 /tmp/zink/lib/libOSMesa_unstripped.so.8
+          if [ "${{matrix.arch}}" == "arm32" ]; then
+            /usr/local/lib/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/arm-linux-androideabi-strip /tmp/zink/lib/libOSMesa.so.8
+          else
+            /usr/local/lib/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/${{matrix.arch}}-linux-android-strip /tmp/zink/lib/libOSMesa.so.8
+          fi
+      - name: Upload libraries
+        uses: actions/upload-artifact@v2
+        with:
+          name: libzink_${{matrix.arch}}
+          path: /tmp/zink
