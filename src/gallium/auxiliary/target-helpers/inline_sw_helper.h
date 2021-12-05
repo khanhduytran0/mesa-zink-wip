@@ -37,6 +37,10 @@
 #include "asahi/agx_public.h"
 #endif
 
+#ifdef GALLIUM_ZINK
+struct pipe_screen *zink_create_screen(struct sw_winsys *winsys);
+#endif
+
 static inline struct pipe_screen *
 sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
 {

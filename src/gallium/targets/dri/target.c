@@ -20,6 +20,7 @@ const __DRIextension **__driDriverGetExtensions_swrast(void);
 
 PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
 {
+#ifndef __ANDROID__ // Port: temp
    globalDriverAPI = &galliumsw_driver_api;
 #if defined(GALLIUM_ZINK)
 // && !defined(__APPLE__)
@@ -28,6 +29,10 @@ PUBLIC const __DRIextension **__driDriverGetExtensions_swrast(void)
    vkDriverAPI = &galliumsw_driver_api;
 #endif
    return galliumsw_driver_extensions;
+#else
+   printf("STUB: __driDriverGetExtensions_swrast\n");
+   return NULL;
+#endif
 }
 
 #if defined(HAVE_LIBDRM)
@@ -139,9 +144,14 @@ const __DRIextension **__driDriverGetExtensions_zink(void);
 
 PUBLIC const __DRIextension **__driDriverGetExtensions_zink(void)
 {
+#ifndef __ANDROID__ // Port: temp
    globalDriverAPI = &galliumvk_driver_api;
    vkDriverAPI = &galliumvk_driver_api;
    return galliumvk_driver_extensions;
+#else
+   printf("STUB: __driDriverGetExtensions_zink\n");
+   return NULL;
+#endif
 }
 
 #endif
