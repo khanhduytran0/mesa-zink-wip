@@ -51,6 +51,10 @@
 #define ZINK_USE_DMABUF
 #endif
 
+#ifdef __ANDROID__
+#undef ZINK_USE_DMABUF
+#endif
+
 #ifdef ZINK_USE_DMABUF
 #include <xf86drm.h>
 #include "drm-uapi/drm_fourcc.h"

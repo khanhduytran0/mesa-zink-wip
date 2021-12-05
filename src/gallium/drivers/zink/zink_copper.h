@@ -45,6 +45,7 @@ struct copper_swapchain {
 enum copper_type {
    COPPER_X11,
    COPPER_WAYLAND,
+   COPPER_ANDROID,
 };
 
 struct copper_loader_info {
@@ -55,6 +56,9 @@ struct copper_loader_info {
 #endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
       VkWaylandSurfaceCreateInfoKHR wl;
+#endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+      VkAndroidSurfaceCreateInfoKHR android;
 #endif
    };
    bool has_alpha;

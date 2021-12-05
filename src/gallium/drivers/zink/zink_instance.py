@@ -120,6 +120,13 @@ impl_code = """
 #include "zink_instance.h"
 #include "zink_screen.h"
 
+#ifdef __ANDROID__
+#define PFN_vkCreateWaylandSurfaceKHR void*
+#define PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR void*
+#define PFN_vkCreateXcbSurfaceKHR void*
+#define PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR void*
+#endif
+
 VkInstance
 zink_create_instance(struct zink_instance_info *instance_info)
 {

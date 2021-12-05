@@ -54,6 +54,7 @@ copper_CreateSurface(struct zink_screen *screen, struct copper_displaytarget *cd
 
     VkStructureType type = cdt->info.bos.sType;
     switch (type) {
+#ifndef __ANDROID__
     case VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR:
        error = VKSCR(CreateXcbSurfaceKHR)(screen->instance, &cdt->info.xcb, NULL, &surface);
        cdt->type = COPPER_X11;
@@ -62,6 +63,12 @@ copper_CreateSurface(struct zink_screen *screen, struct copper_displaytarget *cd
        error = VKSCR(CreateWaylandSurfaceKHR)(screen->instance, &cdt->info.wl, NULL, &surface);
        cdt->type = COPPER_WAYLAND;
        break;
+#else
+    case VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR:
+       error = VKSCR(CreateAndroidSurfaceKHR)(screen->instance, &cdt->info.android, NULL, &surface);
+       cdt->type = COPPER_ANDROID;
+       break;
+#endif
     default:
        unreachable("unsupported!");
     }
@@ -107,12 +114,18 @@ find_dt_entry(struct zink_screen *screen, const struct copper_displaytarget *cdt
 {
    struct hash_entry *he = NULL;
    switch (cdt->type) {
+#ifndef __ANDROID__
    case COPPER_X11:
       he = _mesa_hash_table_search_pre_hashed(&screen->dts, cdt->info.xcb.window, (void*)(uintptr_t)cdt->info.xcb.window);
       break;
    case COPPER_WAYLAND:
       he = _mesa_hash_table_search(&screen->dts, cdt->info.wl.surface);
       break;
+#else
+   case COPPER_ANDROID:
+      he = _mesa_hash_table_search(&screen->dts, cdt->info.android.window);
+      break;
+#endif
    default:
       unreachable("unsupported!");
    }
@@ -185,6 +198,7 @@ copper_CreateSwapchain(struct zink_screen *screen, struct copper_displaytarget *
       cswap->scci.imageExtent.width = cdt->caps.currentExtent.width;
       cswap->scci.imageExtent.height = cdt->caps.currentExtent.height;
       break;
+   case COPPER_ANDROID: // FIXME: Android port: is this correct?
    case COPPER_WAYLAND:
       /* On Wayland, currentExtent is the special value (0xFFFFFFFF, 0xFFFFFFFF), indicating that the
        * surface size will be determined by the extent of a swapchain targeting the surface. Whatever the
@@ -300,6 +314,7 @@ copper_displaytarget_create(struct sw_winsys *ws, unsigned tex_usage,
 
    simple_mtx_lock(&screen->dt_lock);
    switch (cdt->type) {
+#ifndef __ANDROID__
    case COPPER_X11:
       if (unlikely(!screen->dts.table))
          _mesa_hash_table_init(&screen->dts, screen, NULL, _mesa_key_pointer_equal);
@@ -310,6 +325,13 @@ copper_displaytarget_create(struct sw_winsys *ws, unsigned tex_usage,
          _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
       _mesa_hash_table_insert(&screen->dts, cdt->info.wl.surface, cdt);
       break;
+#else
+   case COPPER_ANDROID:
+      if (unlikely(!screen->dts.table))
+         _mesa_hash_table_init(&screen->dts, screen, _mesa_hash_pointer, _mesa_key_pointer_equal);
+      _mesa_hash_table_insert(&screen->dts, cdt->info.android.window, cdt);
+      break;
+#endif
    default:
       unreachable("unsupported!");
    }
